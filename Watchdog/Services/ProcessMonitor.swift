@@ -425,6 +425,8 @@ final class ProcessMonitor: ObservableObject {
             totalBytes: 48 * 1_024 * 1_024 * 1_024,
             usedBytes: 44 * 1_024 * 1_024 * 1_024,
             compressedBytes: 6 * 1_024 * 1_024 * 1_024,
+            swapUsedBytes: 12 * 1_024 * 1_024 * 1_024,
+            swapTotalBytes: 16 * 1_024 * 1_024 * 1_024,
             pressureLevel: .normal
         )
         lastUpdated = updatedAt

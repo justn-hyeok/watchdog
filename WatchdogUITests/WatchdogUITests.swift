@@ -15,6 +15,11 @@ final class WatchdogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["메모리 높음"].exists)
         XCTAssertTrue(app.staticTexts["고아 의심"].exists)
 
+        let memoryDetails = app.descendants(matching: .any)["watchdog.memory.details"]
+        XCTAssertTrue(memoryDetails.waitForExistence(timeout: 2))
+        XCTAssertTrue(memoryDetails.label.contains("압축"))
+        XCTAssertTrue(memoryDetails.label.contains("스왑"))
+
         let row = app.descendants(matching: .any)["\(actionableProcess).row"]
         XCTAssertTrue(row.waitForExistence(timeout: 2))
         XCTAssertTrue(row.label.contains("claude"))

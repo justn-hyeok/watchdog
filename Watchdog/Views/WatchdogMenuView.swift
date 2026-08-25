@@ -122,6 +122,19 @@ struct WatchdogMenuView: View {
                     color: memoryPressureColor
                 )
             }
+
+            if let memory = monitor.systemMemory {
+                HStack(spacing: 12) {
+                    Text("압축 \(formattedMemory(memory.compressedBytes))")
+                    Spacer()
+                    Text(swapSummary(memory))
+                }
+                .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("watchdog.memory.details")
+            }
         }
         .padding(16)
     }
@@ -370,6 +383,17 @@ struct WatchdogMenuView: View {
         let used = WatchdogFormatters.memory.string(fromByteCount: Int64(memory.usedBytes))
         let total = WatchdogFormatters.memory.string(fromByteCount: Int64(memory.totalBytes))
         return "\(used)/\(total)"
+    }
+
+    private func formattedMemory(_ bytes: UInt64) -> String {
+        WatchdogFormatters.memory.string(fromByteCount: Int64(clamping: bytes))
+    }
+
+    private func swapSummary(_ memory: SystemMemorySnapshot) -> String {
+        guard let used = memory.swapUsedBytes, let total = memory.swapTotalBytes else {
+            return "스왑 정보 없음"
+        }
+        return "스왑 \(formattedMemory(used))/\(formattedMemory(total))"
     }
 
     private var memoryPressureColor: Color {

@@ -19,6 +19,10 @@ final class MetricsAndControlTests: XCTestCase {
         XCTAssertLessThanOrEqual(memory.usedBytes, memory.totalBytes)
         XCTAssertGreaterThanOrEqual(memory.usedPercent, 0)
         XCTAssertLessThanOrEqual(memory.usedPercent, 100)
+        XCTAssertLessThanOrEqual(memory.compressedBytes, memory.totalBytes)
+        let swapUsed = try XCTUnwrap(memory.swapUsedBytes)
+        let swapTotal = try XCTUnwrap(memory.swapTotalBytes)
+        XCTAssertLessThanOrEqual(swapUsed, swapTotal)
     }
 
     func testSmokeLiveSamplerProducesStableIdentity() async throws {

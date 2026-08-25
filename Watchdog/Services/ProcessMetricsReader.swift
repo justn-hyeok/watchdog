@@ -157,7 +157,25 @@ struct SystemMemorySnapshot: Equatable, Sendable {
     let totalBytes: UInt64
     let usedBytes: UInt64
     let compressedBytes: UInt64
+    let swapUsedBytes: UInt64?
+    let swapTotalBytes: UInt64?
     let pressureLevel: MemoryPressureLevel
+
+    init(
+        totalBytes: UInt64,
+        usedBytes: UInt64,
+        compressedBytes: UInt64,
+        swapUsedBytes: UInt64? = nil,
+        swapTotalBytes: UInt64? = nil,
+        pressureLevel: MemoryPressureLevel
+    ) {
+        self.totalBytes = totalBytes
+        self.usedBytes = usedBytes
+        self.compressedBytes = compressedBytes
+        self.swapUsedBytes = swapUsedBytes
+        self.swapTotalBytes = swapTotalBytes
+        self.pressureLevel = pressureLevel
+    }
 
     var usedPercent: Double {
         guard totalBytes > 0 else { return 0 }
@@ -221,10 +239,22 @@ enum SystemMetricsReader {
             ? MemoryPressureLevel(rawValue: pressureRaw) ?? .unknown
             : .unknown
 
+        var swapUsage = xsw_usage()
+        var swapSize = MemoryLayout<xsw_usage>.size
+        let swapResult = sysctlbyname(
+            "vm.swapusage",
+            &swapUsage,
+            &swapSize,
+            nil,
+            0
+        )
+
         return SystemMemorySnapshot(
             totalBytes: total,
             usedBytes: used,
             compressedBytes: compressed,
+            swapUsedBytes: swapResult == 0 ? swapUsage.xsu_used : nil,
+            swapTotalBytes: swapResult == 0 ? swapUsage.xsu_total : nil,
             pressureLevel: pressure
         )
     }
