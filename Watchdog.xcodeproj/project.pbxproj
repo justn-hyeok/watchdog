@@ -11,8 +11,10 @@
 		027F80D44CE235E4634CE0BF /* ProcessController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1028DA28879351ED076250 /* ProcessController.swift */; };
 		04848585685EB77F026114B8 /* ProcessController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1028DA28879351ED076250 /* ProcessController.swift */; };
 		0C59B5F7CA35F056D3ECBC58 /* ProcessMetricsReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FABA311DCF4E239B4A00A16 /* ProcessMetricsReader.swift */; };
+		14000627A0BE6F04E6AB7B6E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FD15E53CE2D0BCF424F15B31 /* Assets.xcassets */; };
 		18CCB8F1D2F63190DCD54B5A /* ProcessRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2AB27B60A06E5E6429929A /* ProcessRow.swift */; };
 		1FA997A0F9438CD96BCFF73D /* OrphanClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A49975DEFFADCBE9E3B19F7 /* OrphanClassifier.swift */; };
+		20AD94CA5091148F8987633C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FD15E53CE2D0BCF424F15B31 /* Assets.xcassets */; };
 		2494668AA14120941932C9E4 /* WatchdogMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B1785C03A9A0C61C008931 /* WatchdogMenuView.swift */; };
 		268503B33E8593366E6D1E5B /* ProcessMetricsReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FABA311DCF4E239B4A00A16 /* ProcessMetricsReader.swift */; };
 		2F3FBD05CBECFE26CDC4C347 /* ProcessSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D5A63247084B65470AC5009 /* ProcessSnapshot.swift */; };
@@ -39,6 +41,7 @@
 		AC2BE03162BB28CB4C90D309 /* OrphanClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B9425347B4C4060EEB9DBF /* OrphanClassifierTests.swift */; };
 		AE144BDC3EE7912258E1149C /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB41E62391B2FBF747C35204 /* Formatters.swift */; };
 		B83CA1860BBB531A3F4D8674 /* WatchdogUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD603B4A4AEFB65FEEEB53D0 /* WatchdogUITests.swift */; };
+		BF5B6137041BFE4C21A2705F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FD15E53CE2D0BCF424F15B31 /* Assets.xcassets */; };
 		BF94148D0BA47AAC55FCD985 /* ProcessSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4786D838D93AFFBEBA493C0E /* ProcessSampler.swift */; };
 		D119CB68928181D6DCC8407C /* WatchdogMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B1785C03A9A0C61C008931 /* WatchdogMenuView.swift */; };
 		D225DB6B15B07E32BC1ED22A /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 48F19CAF56AF4320FE43A74C /* Info.plist */; };
@@ -110,6 +113,7 @@
 		CD603B4A4AEFB65FEEEB53D0 /* WatchdogUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchdogUITests.swift; sourceTree = "<group>"; };
 		EB41E62391B2FBF747C35204 /* Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatters.swift; sourceTree = "<group>"; };
 		F1843659E8E6FE1E5CAED3F8 /* WatchdogApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchdogApp.swift; sourceTree = "<group>"; };
+		FD15E53CE2D0BCF424F15B31 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FF5297CC89235C51FCFAD950 /* WatchdogPreviewApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchdogPreviewApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -125,6 +129,7 @@
 		4EC218C01B56A0EE5D27E86F /* Watchdog */ = {
 			isa = PBXGroup;
 			children = (
+				FD15E53CE2D0BCF424F15B31 /* Assets.xcassets */,
 				48F19CAF56AF4320FE43A74C /* Info.plist */,
 				F1843659E8E6FE1E5CAED3F8 /* WatchdogApp.swift */,
 				DCB0B842E594692B1F5B3133 /* Models */,
@@ -293,6 +298,7 @@
 			buildConfigurationList = 2321B6B7CC37137BC41E660E /* Build configuration list for PBXNativeTarget "Watchdog" */;
 			buildPhases = (
 				24B40EBE3DF8D128FFC36388 /* Sources */,
+				3EE5923127468F632A1C84F4 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -310,6 +316,7 @@
 			buildConfigurationList = 98171F2B4A390ACCC3263D6E /* Build configuration list for PBXNativeTarget "WatchdogSnapshot" */;
 			buildPhases = (
 				2256F71AB0CC8B68BA8B21E0 /* Sources */,
+				4AF14B439F567969C016BD44 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -366,10 +373,27 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		3EE5923127468F632A1C84F4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				14000627A0BE6F04E6AB7B6E /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4AF14B439F567969C016BD44 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				20AD94CA5091148F8987633C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A96F6AB47670824791CEAFB8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BF5B6137041BFE4C21A2705F /* Assets.xcassets in Resources */,
 				D225DB6B15B07E32BC1ED22A /* Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

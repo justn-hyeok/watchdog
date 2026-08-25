@@ -22,6 +22,26 @@ final class WatchdogUITests: XCTestCase {
     }
 
     @MainActor
+    func testAboutPanelShowsVersionAndCopyright() {
+        let app = launch(arguments: ["--ui-test-fixture"])
+        defer { app.terminate() }
+
+        let aboutButton = app.buttons["watchdog.about"]
+        XCTAssertTrue(aboutButton.waitForExistence(timeout: 5))
+        aboutButton.click()
+
+        let version = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS '0.1.0' OR value CONTAINS '0.1.0'")
+        ).firstMatch
+        XCTAssertTrue(version.waitForExistence(timeout: 2))
+
+        let copyright = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS '2026 justn-hyeok' OR value CONTAINS '2026 justn-hyeok'")
+        ).firstMatch
+        XCTAssertTrue(copyright.exists)
+    }
+
+    @MainActor
     func testSearchShowsNoMatchState() {
         let app = launch(arguments: ["--ui-test-fixture"])
         defer { app.terminate() }

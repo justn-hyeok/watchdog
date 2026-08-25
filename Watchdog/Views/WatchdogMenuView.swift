@@ -304,6 +304,17 @@ struct WatchdogMenuView: View {
             .help("지금 새로고침")
             .accessibilityLabel("지금 새로고침")
 
+            Button {
+                NSApplication.shared.orderFrontStandardAboutPanel(nil)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            } label: {
+                Image(systemName: "info.circle")
+            }
+            .buttonStyle(.plain)
+            .help("Watchdog 정보")
+            .accessibilityLabel("Watchdog 정보")
+            .accessibilityIdentifier("watchdog.about")
+
             Button("종료") {
                 NSApplication.shared.terminate(nil)
             }

@@ -81,7 +81,10 @@ enum ProcessMetricsReader {
                         + bsdInfo.pbi_start_tvusec,
                     userID: bsdInfo.pbi_uid
                 ),
-                executablePath: String(cString: pathBuffer),
+                executablePath: String(
+                    decoding: pathBuffer.prefix(Int(pathLength)).map { UInt8(bitPattern: $0) },
+                    as: UTF8.self
+                ),
                 isSuspended: bsdInfo.pbi_status == UInt32(SSTOP)
             )
         )
