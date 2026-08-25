@@ -1,0 +1,94 @@
+name: Watchdog
+options:
+  bundleIdPrefix: dev.justn
+  createIntermediateGroups: true
+  developmentLanguage: ko
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+targets:
+  Watchdog:
+    type: application
+    platform: macOS
+    sources:
+      - path: Watchdog
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.justn.watchdog
+        PRODUCT_NAME: Watchdog
+        INFOPLIST_FILE: Watchdog/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+  WatchdogTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: WatchdogTests
+    dependencies:
+      - target: Watchdog
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.justn.watchdog.tests
+        GENERATE_INFOPLIST_FILE: YES
+  WatchdogPreview:
+    type: application
+    platform: macOS
+    sources:
+      - path: Watchdog
+        excludes:
+          - WatchdogApp.swift
+      - path: WatchdogPreview
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.justn.watchdog.preview
+        PRODUCT_NAME: WatchdogPreview
+        INFOPLIST_FILE: WatchdogPreview/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+  WatchdogUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: WatchdogUITests
+    dependencies:
+      - target: Watchdog
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.justn.watchdog.ui-tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Watchdog
+  WatchdogSnapshot:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Watchdog
+        excludes:
+          - WatchdogApp.swift
+      - path: WatchdogSnapshot
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.justn.watchdog.snapshot
+schemes:
+  Watchdog:
+    build:
+      targets:
+        Watchdog: all
+    test:
+      targets:
+        - WatchdogTests
+        - WatchdogUITests
+  WatchdogPreview:
+    build:
+      targets:
+        WatchdogPreview: all
+  WatchdogSnapshot:
+    build:
+      targets:
+        WatchdogSnapshot: all
