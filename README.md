@@ -2,6 +2,29 @@
 
 Watchdog는 폭주하거나 고아가 된 프로세스를 터미널 명령 없이 찾아 정리할 수 있는 네이티브 macOS 메뉴바 유틸리티입니다.
 
+## 설치
+
+요구 사항: macOS 14 이상.
+
+1. [GitHub Releases](https://github.com/justn-hyeok/watchdog/releases)에서 최신 DMG를 내려받습니다.
+2. DMG를 열고 Watchdog을 Applications 폴더로 드래그합니다.
+3. 현재 공개 베타는 Apple 공증 전 빌드이므로 최초 실행 시 Finder에서 Watchdog을 우클릭하고 **열기 → 열기**를 선택합니다.
+
+우클릭으로 열리지 않으면 한 번 실행을 시도한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기**를 선택합니다. 이는 Apple이 제공하는 앱별 승인 절차입니다. 전역 Gatekeeper 비활성화나 격리 속성 제거는 필요하지 않습니다.
+
+공식 배포 파일은 이 저장소의 Releases에서만 제공합니다. `v0.1.0-beta.1` 파일 무결성:
+
+```text
+Watchdog-0.1.0-macos.zip  fb1b23cb24e7c3bbe69a95ae47235d1c48d66fc175d168233ce2593b5ccf4d69
+Watchdog-0.1.0-macos.dmg  7aad562f1be09229f05d132a3e4b94351ef1a69c735521c27acdb5daf58c25e4
+```
+
+검증 명령:
+
+```bash
+shasum -a 256 Watchdog-0.1.0-macos.dmg
+```
+
 ## 주요 기능
 
 - 앱 실행 직후 메뉴를 열지 않아도 2초 주기로 감시를 시작합니다.
@@ -32,15 +55,21 @@ Watchdog는 폭주하거나 고아가 된 프로세스를 터미널 명령 없�
 
 저장된 값이 숫자가 아니거나 무한대·범위 밖 값이면 시작 시 안전한 범위로 정규화됩니다. CPU와 메모리의 지속 시간은 벽시계가 아닌 단조 시계로 계산하며, 수집 실패나 5초를 넘는 관측 공백은 누적을 초기화합니다.
 
-## 개발 및 검증
+## 소스에서 빌드
 
-요구 사항: macOS 14 이상, Xcode 16 이상, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+요구 사항: Xcode 16 이상, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ```bash
+git clone https://github.com/justn-hyeok/watchdog.git
+cd watchdog
 xcodegen generate
-xcodebuild -project Watchdog.xcodeproj -scheme Watchdog -configuration Debug test
-xcodebuild -project Watchdog.xcodeproj -scheme WatchdogPreview -configuration Debug test
 xcodebuild -project Watchdog.xcodeproj -scheme Watchdog -configuration Debug build
+```
+
+전체 검증:
+
+```bash
+xcodebuild -project Watchdog.xcodeproj -scheme Watchdog -configuration Debug test
 xcodebuild -project Watchdog.xcodeproj -scheme Watchdog -configuration Release build
 ```
 
@@ -48,9 +77,9 @@ xcodebuild -project Watchdog.xcodeproj -scheme Watchdog -configuration Release b
 
 `project.yml`이 Xcode 프로젝트 구성의 유일한 기준입니다. 대상이나 파일 배치를 변경한 뒤에는 XcodeGen으로 프로젝트를 재생성합니다.
 
-## 배포 게이트
+## 정식 배포 게이트
 
-배포 가능한 릴리스는 다음 증거가 모두 있어야 합니다.
+현재 베타는 Apple Developer ID 공증 전 빌드입니다. 경고 없는 정식 배포판은 다음 증거가 모두 있어야 합니다.
 
 1. 단위·통합·UI 테스트 결과 번들
 2. Debug/Release 빌드와 앱 실행·프로세스 생존 스모크
@@ -59,3 +88,7 @@ xcodebuild -project Watchdog.xcodeproj -scheme Watchdog -configuration Release b
 5. Apple 공증 `Accepted`, staple 검증, staple 후 Gatekeeper 통과
 
 서명 인증서, Team ID, 공증 프로필과 export plist는 릴리스 환경에서만 제공하며 저장소에 커밋하지 않습니다.
+
+## 라이선스
+
+[MIT License](LICENSE)
