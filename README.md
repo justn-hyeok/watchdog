@@ -4,7 +4,9 @@ Watchdog는 폭주하거나 고아가 된 프로세스를 터미널 명령 없�
 
 ## 설치
 
-요구 사항: macOS 14 이상.
+요구 사항: macOS 14 이상. 사람·에이전트 공통 상세 절차는 **[INSTALL.md](INSTALL.md)**가 기준입니다.
+
+### 사람이 설치
 
 1. [GitHub Releases](https://github.com/justn-hyeok/watchdog/releases)에서 최신 DMG를 내려받습니다.
 2. DMG를 열고 Watchdog을 Applications 폴더로 드래그합니다.
@@ -24,6 +26,16 @@ Watchdog-0.1.0-macos.dmg  7aad562f1be09229f05d132a3e4b94351ef1a69c735521c27acdb5
 ```bash
 shasum -a 256 Watchdog-0.1.0-macos.dmg
 ```
+
+### 에이전트·터미널에서 설치
+
+```bash
+git clone https://github.com/justn-hyeok/watchdog.git
+cd watchdog
+./scripts/install.sh
+```
+
+스크립트는 공식 릴리스 다운로드, SHA-256 확인, 코드 서명 구조 검증과 `~/Applications` 설치만 수행합니다. `sudo`, `SIGKILL`, Gatekeeper 비활성화 또는 quarantine 제거는 사용하지 않습니다.
 
 ## 주요 기능
 
