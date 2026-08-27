@@ -36,6 +36,10 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
             || arguments.contains("--ui-test-outcome-fixture")
             || arguments.contains("--ui-test-exited-fixture")
             || arguments.contains("--ui-test-still-running-fixture")
+        if !isUITestFixture, activateExistingInstanceIfPresent() {
+            NSApplication.shared.terminate(nil)
+            return
+        }
         NSApplication.shared.setActivationPolicy(isUITestFixture ? .regular : .accessory)
         if isUITestFixture {
             Task { @MainActor in
@@ -45,18 +49,27 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         #else
+        if activateExistingInstanceIfPresent() {
+            NSApplication.shared.terminate(nil)
+            return
+        }
         NSApplication.shared.setActivationPolicy(.accessory)
         #endif
-        terminateOlderInstances()
     }
 
-    private func terminateOlderInstances() {
-        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
-
-        for application in NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
-        where application.processIdentifier != getpid() {
-            application.terminate()
+    private func activateExistingInstanceIfPresent() -> Bool {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return false }
+        guard let existing = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .filter({ $0.processIdentifier != getpid() })
+            .min(by: {
+                ($0.launchDate ?? .distantFuture) < ($1.launchDate ?? .distantFuture)
+            })
+        else {
+            return false
         }
+        existing.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        return true
     }
 }
 
