@@ -137,6 +137,12 @@ struct WatchdogMenuView: View {
                 .font(.system(size: 9.5, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("메모리 세부 정보")
+                .accessibilityValue(
+                    "압축 \(formattedMemory(memory.compressedBytes)) · \(swapSummary(memory))"
+                )
+                .accessibilityIdentifier("watchdog.memory.details")
             }
         }
         .padding(16)

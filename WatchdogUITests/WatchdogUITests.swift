@@ -15,14 +15,11 @@ final class WatchdogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["메모리 높음"].exists)
         XCTAssertTrue(app.staticTexts["고아 의심"].exists)
 
-        let compressedMemory = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "압축 ")
-        ).firstMatch
-        let swapUsage = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "스왑 ")
-        ).firstMatch
-        XCTAssertTrue(compressedMemory.waitForExistence(timeout: 2))
-        XCTAssertTrue(swapUsage.waitForExistence(timeout: 2))
+        let memoryDetails = app.descendants(matching: .any)["watchdog.memory.details"]
+        XCTAssertTrue(memoryDetails.waitForExistence(timeout: 2))
+        let memoryValue = memoryDetails.value as? String
+        XCTAssertTrue(memoryValue?.contains("압축") == true)
+        XCTAssertTrue(memoryValue?.contains("스왑") == true)
 
         let row = app.descendants(matching: .any)["\(actionableProcess).row"]
         XCTAssertTrue(row.waitForExistence(timeout: 2))
@@ -147,7 +144,9 @@ final class WatchdogUITests: XCTestCase {
         let app = launch(arguments: ["--ui-test-fixture"])
         defer { app.terminate() }
         openActionMenu(in: app)
-        app.menuItems["강제 종료…"].click()
+        let forceQuit = app.menuItems["강제 종료…"]
+        XCTAssertTrue(forceQuit.waitForExistence(timeout: 2))
+        forceQuit.click()
 
         let alert = app.sheets.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 2))
