@@ -98,8 +98,8 @@ final class WatchdogUITests: XCTestCase {
         let undoIgnore = app.buttons["\(actionableProcess).undo-ignore"]
         XCTAssertTrue(undoIgnore.waitForExistence(timeout: 2))
         undoIgnore.click()
-        XCTAssertFalse(app.staticTexts["무시 중"].exists)
-        XCTAssertTrue(app.staticTexts["CPU 높음"].exists)
+        XCTAssertTrue(app.staticTexts["무시 중"].waitForNonExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["CPU 높음"].waitForExistence(timeout: 2))
     }
 
     @MainActor
