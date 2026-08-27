@@ -26,7 +26,7 @@ struct DestructiveActionConfirmationRequest: Sendable {
     fileprivate let id: UUID
     fileprivate let action: ProcessControlAction
     fileprivate let identity: ProcessIdentity
-    fileprivate let observation: ObservationToken
+    fileprivate let requestedAt: ContinuousClock.Instant
 }
 
 enum ProcessActionOutcome: Equatable, Sendable {
@@ -99,7 +99,7 @@ final class ProcessMonitor: ObservableObject {
     private var observation: ObservationToken?
     private var generation: UInt64 = 0
     private var notificationCooldowns: [NotificationCooldownKey: ContinuousClock.Instant] = [:]
-    private var pendingConfirmationIDs: Set<UUID> = []
+    private var pendingConfirmations: [UUID: ContinuousClock.Instant] = [:]
     private var ignorePruneCursor = 0
     private var terminationPollTasks: [ProcessIdentity: (id: UUID, task: Task<Void, Never>)] = [:]
 
@@ -152,7 +152,6 @@ final class ProcessMonitor: ObservableObject {
             generation = nextGeneration
             let token = ObservationToken(generation: nextGeneration, instant: clock.now)
             observation = token
-            pendingConfirmationIDs.removeAll(keepingCapacity: true)
             let snapshots = OrphanClassifier.classify(sample.processes)
 
             let liveIdentities = Set(snapshots.map(\.identity))
@@ -220,7 +219,7 @@ final class ProcessMonitor: ObservableObject {
             hotProcesses.removeAll()
             highMemoryProcesses.removeAll()
             await authorization.invalidateAll()
-            pendingConfirmationIDs.removeAll(keepingCapacity: true)
+            pendingConfirmations.removeAll(keepingCapacity: true)
             await workingDirectoryResolver.cancel(generation: generation)
         }
     }
@@ -314,34 +313,36 @@ final class ProcessMonitor: ObservableObject {
         for process: ProcessSnapshot
     ) throws -> DestructiveActionConfirmationRequest {
         guard action.isDestructive,
-              let observation,
+              observation != nil,
               actionability(of: process).canAct,
               processes.contains(where: { $0.identity == process.identity })
         else {
             throw ProcessControlError.staleObservation
         }
-        guard pendingConfirmationIDs.count < 256 else {
+        let requestedAt = clock.now
+        pendingConfirmations = pendingConfirmations.filter {
+            requestedAt < $0.value.advanced(by: .seconds(30))
+        }
+        guard pendingConfirmations.count < 256 else {
             throw ProcessControlError.authorizationCapacityReached
         }
         let request = DestructiveActionConfirmationRequest(
             id: UUID(),
             action: action,
             identity: process.identity,
-            observation: observation
+            requestedAt: requestedAt
         )
-        pendingConfirmationIDs.insert(request.id)
+        pendingConfirmations[request.id] = requestedAt
         return request
     }
 
     func completeDestructiveConfirmation(
         _ request: DestructiveActionConfirmationRequest
     ) async throws {
-        guard pendingConfirmationIDs.remove(request.id) != nil,
+        guard pendingConfirmations.removeValue(forKey: request.id) == request.requestedAt,
               request.action.isDestructive,
               let observation,
-              observation.generation == request.observation.generation,
-              observation.instant == request.observation.instant,
-              clock.now < request.observation.instant.advanced(by: .seconds(5)),
+              clock.now < request.requestedAt.advanced(by: .seconds(30)),
               processes.contains(where: { $0.identity == request.identity }),
               let process = processes.first(where: { $0.identity == request.identity }),
               actionability(of: process).canAct
@@ -351,7 +352,7 @@ final class ProcessMonitor: ObservableObject {
         let nonce = try await authorization.mint(
             action: request.action,
             identity: request.identity,
-            observation: request.observation,
+            observation: observation,
             at: clock.now
         )
         try await consumeAction(nonce, action: request.action, process: process)

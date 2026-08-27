@@ -250,21 +250,68 @@ final class ProcessMonitorTests: XCTestCase {
         await fulfillment(of: [unexpected], timeout: 0.05)
     }
 
-    func testDestructiveConfirmationRejectsOriginalGenerationAfterRefresh() async throws {
-        let monitor = makeMonitor()
+    func testDestructiveConfirmationUsesFreshObservationAfterRefresh() async throws {
+        let signals = LockedSignals()
         let process = snapshot(pid: 5_500, name: "/usr/local/bin/gjc")
+        let controller = ProcessController(
+            factsReader: { _ in
+                .found(
+                    LiveProcessFacts(
+                        identity: process.identity,
+                        executablePath: process.executablePath,
+                        isSuspended: false
+                    )
+                )
+            },
+            signalSender: { pid, signal in
+                signals.record(pid: pid, signal: signal)
+                return 0
+            }
+        )
+        let monitor = ProcessMonitor(defaults: makeDefaults(), controller: controller)
         monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
         let request = try monitor.destructiveActionRequest(.terminate, for: process)
 
         monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
+        try await monitor.completeDestructiveConfirmation(request)
+
+        XCTAssertEqual(signals.values.count, 1)
+        XCTAssertEqual(signals.values.first?.pid, process.id)
+        XCTAssertEqual(signals.values.first?.signal, SIGTERM)
+    }
+
+    func testDestructiveConfirmationRejectsChangedIdentityAfterRefresh() async throws {
+        let signals = LockedSignals()
+        let process = snapshot(pid: 5_500, name: "/usr/local/bin/gjc", startTime: 1)
+        let replacement = snapshot(pid: 5_500, name: "/usr/local/bin/gjc", startTime: 2)
+        let controller = ProcessController(
+            factsReader: { _ in
+                .found(
+                    LiveProcessFacts(
+                        identity: replacement.identity,
+                        executablePath: replacement.executablePath,
+                        isSuspended: false
+                    )
+                )
+            },
+            signalSender: { pid, signal in
+                signals.record(pid: pid, signal: signal)
+                return 0
+            }
+        )
+        let monitor = ProcessMonitor(defaults: makeDefaults(), controller: controller)
+        monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
+        let request = try monitor.destructiveActionRequest(.terminate, for: process)
+        monitor.loadActionablePreview(processes: [replacement], hotProcesses: [], updatedAt: Date())
 
         do {
             try await monitor.completeDestructiveConfirmation(request)
-            XCTFail("A confirmation from an older observation must not signal")
+            XCTFail("A confirmation must remain bound to the original process identity")
         } catch ProcessControlError.staleObservation {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+        XCTAssertTrue(signals.values.isEmpty)
     }
 
     func testConsumedAuthorizationCannotSignalAfterGenerationChanges() async throws {
