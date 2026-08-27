@@ -53,7 +53,7 @@ done
   exit 1
 }
 
-for command in curl shasum ditto codesign; do
+for command in curl shasum ditto codesign pgrep ps; do
   command -v "$command" >/dev/null || {
     echo "Required command not found: $command" >&2
     exit 1
@@ -92,17 +92,40 @@ ditto "$unpack_dir/Watchdog.app" "$staged_app"
 codesign --verify --deep --strict --verbose=2 "$staged_app"
 
 mkdir -p "$install_dir"
+install_dir="$(cd "$install_dir" && pwd -P)"
+target_app="$install_dir/Watchdog.app"
+backup_app="$install_dir/.Watchdog.app.backup.$$"
 
 if [[ -d "$target_app" ]]; then
-  running_pid="$(pgrep -f "$target_app/Contents/MacOS/Watchdog" || true)"
-  if [[ -n "$running_pid" ]]; then
+  target_executable="$target_app/Contents/MacOS/Watchdog"
+  running_pids=()
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    command_path="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    [[ "$command_path" == "$target_executable" ]] || continue
+    running_pids+=("$pid")
+  done < <(pgrep -x Watchdog || true)
+
+  if ((${#running_pids[@]})); then
     echo "Stopping the installed Watchdog gracefully…"
-    /bin/kill -TERM "$running_pid"
+    for pid in "${running_pids[@]}"; do
+      command_path="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+      [[ "$command_path" == "$target_executable" ]] || continue
+      /bin/kill -TERM "$pid"
+    done
     for _ in 1 2 3 4 5; do
-      /bin/kill -0 "$running_pid" 2>/dev/null || break
+      still_running=false
+      for pid in "${running_pids[@]}"; do
+        command_path="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+        if [[ "$command_path" == "$target_executable" ]]; then
+          still_running=true
+          break
+        fi
+      done
+      $still_running || break
       sleep 1
     done
-    if /bin/kill -0 "$running_pid" 2>/dev/null; then
+    if $still_running; then
       echo "Watchdog is still running. Quit it manually and rerun the installer." >&2
       exit 1
     fi
