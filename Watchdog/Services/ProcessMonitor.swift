@@ -639,8 +639,15 @@ final class ProcessMonitor: ObservableObject {
         _ outcome: ProcessActionOutcome,
         for identity: ProcessIdentity
     ) {
+        let recordedAt = clock.now
         actionOutcomes[identity] = outcome
-        actionOutcomeRecordedAt[identity] = clock.now
+        actionOutcomeRecordedAt[identity] = recordedAt
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(30))
+            guard self?.actionOutcomeRecordedAt[identity] == recordedAt else { return }
+            self?.actionOutcomeRecordedAt[identity] = nil
+            self?.actionOutcomes[identity] = nil
+        }
     }
 
     private func pruneActionOutcomes(at instant: ContinuousClock.Instant) {
