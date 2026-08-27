@@ -625,12 +625,18 @@ final class ProcessMonitor: ObservableObject {
     }
 
     private func requestNotificationPermission() {
+        let shouldRequestAuthorization = notificationsEnabled
         Task {
             let center = UNUserNotificationCenter.current()
-            if notificationsEnabled {
+            if shouldRequestAuthorization {
                 _ = try? await center.requestAuthorization(options: [.alert, .sound])
             }
-            notificationAuthorization = await center.notificationSettings().authorizationStatus
+            center.getNotificationSettings { [weak self] settings in
+                let authorizationStatus = settings.authorizationStatus
+                Task { @MainActor [weak self] in
+                    self?.notificationAuthorization = authorizationStatus
+                }
+            }
         }
     }
 
