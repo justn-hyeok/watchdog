@@ -420,14 +420,24 @@ final class ProcessMonitorTests: XCTestCase {
     }
 
     func testTerminationPollIsDeduplicatedPerIdentityAndCleansUp() async {
-        let monitor = makeMonitor()
+        let lookupStarted = expectation(description: "termination lookup")
+        lookupStarted.assertForOverFulfill = false
+        let controller = ProcessController(factsReader: { _ in
+            lookupStarted.fulfill()
+            return .absent
+        })
+        let monitor = ProcessMonitor(defaults: makeDefaults(), controller: controller)
         let identity = ProcessIdentity(pid: 99_991, startTimeMicroseconds: 1, userID: getuid())
 
         monitor.startTerminationPollPreview(for: identity)
         monitor.startTerminationPollPreview(for: identity)
         XCTAssertEqual(monitor.terminationPollCountPreview, 1)
 
-        try? await Task.sleep(for: .milliseconds(700))
+        await fulfillment(of: [lookupStarted], timeout: 1)
+        let deadline = ContinuousClock().now.advanced(by: .seconds(1))
+        while monitor.terminationPollCountPreview != 0, ContinuousClock().now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         XCTAssertEqual(monitor.terminationPollCountPreview, 0)
         XCTAssertEqual(monitor.actionOutcomes[identity], .exited)
     }
