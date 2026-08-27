@@ -15,10 +15,16 @@ final class WatchdogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["메모리 높음"].exists)
         XCTAssertTrue(app.staticTexts["고아 의심"].exists)
 
-        let memoryDetails = app.descendants(matching: .any)["watchdog.memory.details"]
+        let memoryDetails = app.otherElements["watchdog.memory.details"]
         XCTAssertTrue(memoryDetails.waitForExistence(timeout: 2))
-        XCTAssertTrue(memoryDetails.label.contains("압축"))
-        XCTAssertTrue(memoryDetails.label.contains("스왑"))
+        XCTAssertTrue(
+            memoryDetails.label.contains("압축"),
+            "Expected compressed-memory text in: \(memoryDetails.label)"
+        )
+        XCTAssertTrue(
+            memoryDetails.label.contains("스왑"),
+            "Expected swap text in: \(memoryDetails.label)"
+        )
 
         let row = app.descendants(matching: .any)["\(actionableProcess).row"]
         XCTAssertTrue(row.waitForExistence(timeout: 2))
@@ -103,7 +109,7 @@ final class WatchdogUITests: XCTestCase {
         let ignoredActions = app.descendants(matching: .any)["\(actionableProcess).actions"]
         XCTAssertTrue(ignoredActions.waitForExistence(timeout: 2))
         ignoredActions.click()
-        let undoIgnore = app.menuItems["\(actionableProcess).undo-ignore"]
+        let undoIgnore = app.menuItems["무시 취소"]
         XCTAssertTrue(undoIgnore.waitForExistence(timeout: 2))
         undoIgnore.click()
         XCTAssertFalse(app.staticTexts["무시 중"].exists)
