@@ -42,7 +42,7 @@ struct ProcessActionNonce: Hashable, Sendable {
 struct AuthorizedProcessAction: Sendable {
     fileprivate let action: ProcessControlAction
     fileprivate let identity: ProcessIdentity
-    fileprivate let observationGeneration: UInt64
+    let observationGeneration: UInt64
     fileprivate let expiresAt: ContinuousClock.Instant
 }
 
@@ -55,10 +55,15 @@ actor ProcessActionAuthorizationActor {
     }
 
     private let capacity: Int
+    private let consumeHook: (@Sendable () async -> Void)?
     private var records: [ProcessActionNonce: Record] = [:]
 
-    init(capacity: Int = 256) {
+    init(
+        capacity: Int = 256,
+        consumeHook: (@Sendable () async -> Void)? = nil
+    ) {
         self.capacity = max(1, min(capacity, 256))
+        self.consumeHook = consumeHook
     }
 
     func mint(
@@ -92,7 +97,7 @@ actor ProcessActionAuthorizationActor {
         identity: ProcessIdentity,
         currentGeneration: UInt64,
         at instant: ContinuousClock.Instant
-    ) throws -> AuthorizedProcessAction {
+    ) async throws -> AuthorizedProcessAction {
         pruneExpired(at: instant, preserving: nonce)
         guard let record = records.removeValue(forKey: nonce) else {
             throw ProcessControlError.authorizationInvalid
@@ -106,6 +111,7 @@ actor ProcessActionAuthorizationActor {
         else {
             throw ProcessControlError.authorizationInvalid
         }
+        await consumeHook?()
         return AuthorizedProcessAction(
             action: record.action,
             identity: record.identity,

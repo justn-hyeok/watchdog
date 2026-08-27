@@ -88,8 +88,8 @@ final class ProcessMonitor: ObservableObject {
     private let defaults: UserDefaults
     private let sampler = ProcessSampler()
     private let workingDirectoryResolver = WorkingDirectoryResolver()
-    private let authorization = ProcessActionAuthorizationActor()
-    private let controller = ProcessController()
+    private let authorization: ProcessActionAuthorizationActor
+    private let controller: ProcessController
     private let clock = ContinuousClock()
     private var tracker = HotProcessTracker()
     private var memoryTracker = MemoryProcessTracker()
@@ -103,8 +103,14 @@ final class ProcessMonitor: ObservableObject {
     private var ignorePruneCursor = 0
     private var terminationPollTasks: [ProcessIdentity: (id: UUID, task: Task<Void, Never>)] = [:]
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        authorization: ProcessActionAuthorizationActor = ProcessActionAuthorizationActor(),
+        controller: ProcessController = ProcessController()
+    ) {
         self.defaults = defaults
+        self.authorization = authorization
+        self.controller = controller
         threshold = Self.normalizedCPU(defaults.object(forKey: Keys.threshold) as? Double ?? 100)
         sustainedDuration = Self.normalizedDuration(defaults.object(forKey: Keys.sustainedDuration) as? Double ?? 20)
         memoryThresholdGB = Self.normalizedMemory(defaults.object(forKey: Keys.memoryThresholdGB) as? Double ?? 2)
@@ -498,9 +504,16 @@ final class ProcessMonitor: ObservableObject {
             currentGeneration: observation.generation,
             at: instant
         )
+        guard let currentObservation = self.observation,
+              currentObservation.generation == authorized.observationGeneration,
+              actionability(of: process).canAct,
+              processes.contains(where: { $0.identity == process.identity })
+        else {
+            throw ProcessControlError.staleObservation
+        }
         try controller.execute(
             authorized,
-            currentGeneration: observation.generation
+            currentGeneration: currentObservation.generation
         )
         actionOutcomes[process.identity] = .signalDelivered
 

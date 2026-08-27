@@ -267,6 +267,53 @@ final class ProcessMonitorTests: XCTestCase {
         }
     }
 
+    func testConsumedAuthorizationCannotSignalAfterGenerationChanges() async throws {
+        let gate = AuthorizationConsumeGate()
+        let authorization = ProcessActionAuthorizationActor(
+            consumeHook: { await gate.wait() }
+        )
+        let signals = LockedSignals()
+        let process = snapshot(pid: 5_503, name: "/usr/local/bin/gjc")
+        let controller = ProcessController(
+            factsReader: { _ in
+                .found(
+                    LiveProcessFacts(
+                        identity: process.identity,
+                        executablePath: process.executablePath,
+                        isSuspended: false
+                    )
+                )
+            },
+            signalSender: { pid, signal in
+                signals.record(pid: pid, signal: signal)
+                return 0
+            }
+        )
+        let monitor = ProcessMonitor(
+            defaults: makeDefaults(),
+            authorization: authorization,
+            controller: controller
+        )
+        monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
+        let request = try monitor.destructiveActionRequest(.terminate, for: process)
+
+        let completion = Task {
+            try await monitor.completeDestructiveConfirmation(request)
+        }
+        await gate.waitUntilEntered()
+        monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
+        await gate.release()
+
+        do {
+            try await completion.value
+            XCTFail("An authorization consumed for an old generation must not signal")
+        } catch ProcessControlError.staleObservation {
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        XCTAssertTrue(signals.values.isEmpty)
+    }
+
     func testLateWorkingDirectoryResultCannotMergeIntoNewGeneration() {
         let monitor = makeMonitor()
         let process = snapshot(pid: 5_501, name: "/usr/local/bin/gjc")
@@ -392,6 +439,51 @@ final class ProcessMonitorTests: XCTestCase {
             startTimeMicroseconds: startTime ?? UInt64(pid) * 1_000_000,
             workingDirectory: nil
         )
+    }
+}
+
+private actor AuthorizationConsumeGate {
+    private var entered = false
+    private var released = false
+    private var entryWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        entered = true
+        for waiter in entryWaiters {
+            waiter.resume()
+        }
+        entryWaiters.removeAll()
+        guard !released else { return }
+        await withCheckedContinuation { releaseWaiters.append($0) }
+    }
+
+    func waitUntilEntered() async {
+        guard !entered else { return }
+        await withCheckedContinuation { entryWaiters.append($0) }
+    }
+
+    func release() {
+        released = true
+        for waiter in releaseWaiters {
+            waiter.resume()
+        }
+        releaseWaiters.removeAll()
+    }
+}
+
+private final class LockedSignals: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [(pid: Int32, signal: Int32)] = []
+
+    var values: [(pid: Int32, signal: Int32)] {
+        lock.withLock { storage }
+    }
+
+    func record(pid: Int32, signal: Int32) {
+        lock.withLock {
+            storage.append((pid, signal))
+        }
     }
 }
 
