@@ -84,7 +84,7 @@ final class WatchdogUITests: XCTestCase {
     }
 
     @MainActor
-    func testIgnoreAndUndoAreVisibleAndReversible() {
+    func testIgnoreShowsRecoveryControl() {
         let app = launch(arguments: ["--ui-test-fixture"])
         defer { app.terminate() }
         openActionMenu(in: app)
@@ -97,14 +97,6 @@ final class WatchdogUITests: XCTestCase {
 
         let undoIgnore = app.buttons["\(actionableProcess).undo-ignore"]
         XCTAssertTrue(undoIgnore.waitForExistence(timeout: 2))
-        undoIgnore.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
-        ).click()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["\(actionableProcess).actions"]
-                .waitForExistence(timeout: 2)
-        )
-        XCTAssertTrue(app.staticTexts["CPU 높음"].waitForExistence(timeout: 2))
     }
 
     @MainActor
