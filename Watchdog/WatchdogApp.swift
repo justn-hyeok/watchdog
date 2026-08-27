@@ -160,6 +160,12 @@ struct WatchdogApp: App {
             } else if usesStillRunningFixture {
                 monitor.setActionOutcomePreview(.stillRunning, for: Self.fixtureProcesses[0])
             }
+            Task { @MainActor in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(2))
+                    monitor.refreshActionablePreviewObservation()
+                }
+            }
         } else if usesStaleFixture {
             monitor.loadStalePreview(
                 processes: Self.fixtureProcesses,

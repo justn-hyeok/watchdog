@@ -420,6 +420,11 @@ final class ProcessMonitor: ObservableObject {
         )
     }
 
+    func refreshActionablePreviewObservation() {
+        generation &+= 1
+        observation = ObservationToken(generation: generation, instant: clock.now)
+    }
+
     func loadPreview(
         processes: [ProcessSnapshot],
         hotProcesses: Set<ProcessIdentity>,
