@@ -84,13 +84,13 @@ struct ProcessRow: View {
             Group {
                 if isIgnored {
                     Button(action: onUndoIgnore) {
-                        Image(systemName: "bell")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24, height: 24)
+                        Label("다시 감시", systemImage: "bell")
+                            .font(.system(size: 10, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
-                    .help("무시 취소")
-                    .accessibilityLabel("무시 취소")
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("다시 감시")
+                    .accessibilityLabel("다시 감시")
                     .accessibilityIdentifier(controlIdentifier("undo-ignore"))
                 } else {
                     Menu {
@@ -128,7 +128,7 @@ struct ProcessRow: View {
                     .accessibilityIdentifier(controlIdentifier("actions"))
                 }
             }
-            .frame(width: 24)
+            .fixedSize()
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
