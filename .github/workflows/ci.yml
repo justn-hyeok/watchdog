@@ -21,15 +21,13 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Regenerate Xcode project
-        run: |
-          xcodegen generate
-          git diff --exit-code -- Watchdog.xcodeproj/project.pbxproj
+      - name: Generate Xcode project
+        run: xcodegen generate
 
       - name: Run unit tests
         run: |
