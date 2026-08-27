@@ -126,10 +126,7 @@ final class WatchdogUITests: XCTestCase {
         let title = app.staticTexts["프로세스를 종료할까요?"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["종료"].exists)
-        app.buttons.matching(identifier: "취소")
-            .matching(NSPredicate(format: "isHittable == true"))
-            .firstMatch
-            .click()
+        app.windows.firstMatch.buttons["취소"].click()
         XCTAssertTrue(title.waitForNonExistence(timeout: 2))
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '신호를 전달했습니다'")).firstMatch.exists)
     }
@@ -146,10 +143,7 @@ final class WatchdogUITests: XCTestCase {
         let title = app.staticTexts["프로세스를 강제 종료할까요?"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["강제 종료"].exists)
-        app.buttons.matching(identifier: "취소")
-            .matching(NSPredicate(format: "isHittable == true"))
-            .firstMatch
-            .click()
+        app.windows.firstMatch.buttons["취소"].click()
         XCTAssertTrue(title.waitForNonExistence(timeout: 2))
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '신호를 전달했습니다'")).firstMatch.exists)
     }
