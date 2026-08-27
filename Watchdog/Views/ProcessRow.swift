@@ -108,13 +108,20 @@ struct ProcessRow: View {
                                 .accessibilityIdentifier(controlIdentifier("terminate"))
                             Button("강제 종료…", systemImage: "bolt.trianglebadge.exclamationmark", role: .destructive, action: onForceQuit)
                                 .accessibilityIdentifier(controlIdentifier("force-quit"))
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundStyle(actionability.canAct ? .secondary : .tertiary)
-                            .accessibilityLabel("프로세스 작업")
                     }
+                    } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(actionability.canAct ? .primary : .tertiary)
+                        .frame(width: 22, height: 22)
+                        .background(
+                            Color.secondary.opacity(actionability.canAct ? 0.12 : 0.06),
+                            in: Circle()
+                        )
+                            .accessibilityLabel("프로세스 작업")
+                        }
                     .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
                     .disabled(!actionability.canAct)
                     .help(actionability.canAct ? "프로세스 작업" : nonActionableReason)
                     .accessibilityHint(actionability.canAct ? "" : nonActionableReason)
