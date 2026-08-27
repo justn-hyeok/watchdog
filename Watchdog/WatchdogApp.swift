@@ -1,6 +1,5 @@
 import AppKit
 import Darwin
-import Darwin
 import SwiftUI
 
 #if DEBUG
@@ -128,6 +127,26 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+private struct WatchdogMenuBarIcon: View {
+    let alertCount: Int
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .strokeBorder(lineWidth: alertCount == 0 ? 1 : 1.4)
+
+            Image(systemName: alertCount == 0 ? "waveform.path.ecg" : "exclamationmark")
+                .font(.system(size: 9, weight: .bold))
+        }
+        .frame(width: 18, height: 16)
+        .symbolRenderingMode(.monochrome)
+        .accessibilityLabel("Watchdog")
+        .accessibilityValue(
+            alertCount == 0 ? "감시 중인 프로세스가 안정적입니다" : "\(alertCount)개 프로세스 주의 필요"
+        )
+    }
+}
+
 @main
 struct WatchdogApp: App {
     @NSApplicationDelegateAdaptor(WatchdogAppDelegate.self) private var appDelegate
@@ -190,7 +209,7 @@ struct WatchdogApp: App {
         MenuBarExtra {
             WatchdogMenuView(monitor: monitor)
         } label: {
-            Label("Watchdog", systemImage: monitor.alertCount == 0 ? "waveform.path.ecg" : "exclamationmark.triangle.fill")
+            WatchdogMenuBarIcon(alertCount: monitor.alertCount)
         }
         .menuBarExtraStyle(.window)
     }
