@@ -99,6 +99,7 @@ final class ProcessMonitor: ObservableObject {
     private var observation: ObservationToken?
     private var generation: UInt64 = 0
     private var notificationCooldowns: [NotificationCooldownKey: ContinuousClock.Instant] = [:]
+    private var actionOutcomeRecordedAt: [ProcessIdentity: ContinuousClock.Instant] = [:]
     private var pendingConfirmations: [UUID: ContinuousClock.Instant] = [:]
     private var ignorePruneCursor = 0
     private var terminationPollTasks: [ProcessIdentity: (id: UUID, task: Task<Void, Never>)] = [:]
@@ -156,6 +157,7 @@ final class ProcessMonitor: ObservableObject {
 
             let liveIdentities = Set(snapshots.map(\.identity))
             pruneNotificationCooldowns(liveIdentities: liveIdentities, at: token.instant)
+            pruneActionOutcomes(at: token.instant)
             pruneIgnoredProcesses(liveIdentities: liveIdentities)
 
             let previousHotProcesses = hotProcesses
@@ -447,7 +449,11 @@ final class ProcessMonitor: ObservableObject {
     }
 
     func setActionOutcomePreview(_ outcome: ProcessActionOutcome, for process: ProcessSnapshot) {
-        actionOutcomes[process.identity] = outcome
+        recordActionOutcome(outcome, for: process.identity)
+    }
+
+    func pruneActionOutcomesPreview(at instant: ContinuousClock.Instant) {
+        pruneActionOutcomes(at: instant)
     }
 
     func reserveNotificationPreview(
@@ -516,10 +522,10 @@ final class ProcessMonitor: ObservableObject {
             authorized,
             currentGeneration: currentObservation.generation
         )
-        actionOutcomes[process.identity] = .signalDelivered
+        recordActionOutcome(.signalDelivered, for: process.identity)
 
         if action.isDestructive {
-            actionOutcomes[process.identity] = .awaitingExit
+            recordActionOutcome(.awaitingExit, for: process.identity)
             pollTerminationOutcome(for: process.identity)
         }
     }
@@ -535,7 +541,7 @@ final class ProcessMonitor: ObservableObject {
                 try await consumeAction(nonce, action: action, process: process)
                 showFeedback(.init(kind: .success, message: message))
             } catch {
-                actionOutcomes[process.identity] = .failed(error.localizedDescription)
+                recordActionOutcome(.failed(error.localizedDescription), for: process.identity)
                 showFeedback(.init(kind: .error, message: error.localizedDescription))
             }
         }
@@ -601,11 +607,11 @@ final class ProcessMonitor: ObservableObject {
                 }.value
                 guard !Task.isCancelled else { return }
                 if let outcome = Self.terminationOutcome(for: lookup, identity: identity) {
-                    self.actionOutcomes[identity] = outcome
+                    self.recordActionOutcome(outcome, for: identity)
                     return
                 }
                 if attempt == 19 {
-                    self.actionOutcomes[identity] = .stillRunning
+                    self.recordActionOutcome(.stillRunning, for: identity)
                 }
             }
         }
@@ -627,6 +633,22 @@ final class ProcessMonitor: ObservableObject {
     private func finishTerminationPoll(identity: ProcessIdentity, id: UUID) {
         guard terminationPollTasks[identity]?.id == id else { return }
         terminationPollTasks[identity] = nil
+    }
+
+    private func recordActionOutcome(
+        _ outcome: ProcessActionOutcome,
+        for identity: ProcessIdentity
+    ) {
+        actionOutcomes[identity] = outcome
+        actionOutcomeRecordedAt[identity] = clock.now
+    }
+
+    private func pruneActionOutcomes(at instant: ContinuousClock.Instant) {
+        let retained = actionOutcomeRecordedAt.filter {
+            $0.value.duration(to: instant) < .seconds(30)
+        }
+        actionOutcomeRecordedAt = retained
+        actionOutcomes = actionOutcomes.filter { retained[$0.key] != nil }
     }
 
     private func showFeedback(_ feedback: ActionFeedback) {

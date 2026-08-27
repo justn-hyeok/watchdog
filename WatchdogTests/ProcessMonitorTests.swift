@@ -442,6 +442,19 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.actionOutcomes[identity], .exited)
     }
 
+    func testActionOutcomesExpireAfterThirtySeconds() {
+        let monitor = makeMonitor()
+        let process = snapshot(pid: 99_992, name: "/usr/local/bin/gjc")
+        let instant = ContinuousClock().now
+
+        monitor.setActionOutcomePreview(.exited, for: process)
+        monitor.pruneActionOutcomesPreview(at: instant.advanced(by: .seconds(29)))
+        XCTAssertEqual(monitor.actionOutcomes[process.identity], .exited)
+
+        monitor.pruneActionOutcomesPreview(at: instant.advanced(by: .seconds(31)))
+        XCTAssertNil(monitor.actionOutcomes[process.identity])
+    }
+
     private func resolveAndWait(
         _ resolver: WorkingDirectoryResolver,
         snapshots: [ProcessSnapshot],
