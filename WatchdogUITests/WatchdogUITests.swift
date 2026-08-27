@@ -15,16 +15,14 @@ final class WatchdogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["메모리 높음"].exists)
         XCTAssertTrue(app.staticTexts["고아 의심"].exists)
 
-        let memoryDetails = app.otherElements["watchdog.memory.details"]
-        XCTAssertTrue(memoryDetails.waitForExistence(timeout: 2))
-        XCTAssertTrue(
-            memoryDetails.label.contains("압축"),
-            "Expected compressed-memory text in: \(memoryDetails.label)"
-        )
-        XCTAssertTrue(
-            memoryDetails.label.contains("스왑"),
-            "Expected swap text in: \(memoryDetails.label)"
-        )
+        let compressedMemory = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "압축 ")
+        ).firstMatch
+        let swapUsage = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "스왑 ")
+        ).firstMatch
+        XCTAssertTrue(compressedMemory.waitForExistence(timeout: 2))
+        XCTAssertTrue(swapUsage.waitForExistence(timeout: 2))
 
         let row = app.descendants(matching: .any)["\(actionableProcess).row"]
         XCTAssertTrue(row.waitForExistence(timeout: 2))

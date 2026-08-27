@@ -105,6 +105,7 @@ struct ProcessRow: View {
                     .foregroundStyle(actionability.canAct || isIgnored ? .secondary : .tertiary)
                     .accessibilityLabel("프로세스 작업")
             }
+            .id(isIgnored)
             .menuStyle(.borderlessButton)
             .frame(width: 24)
             .disabled(!actionability.canAct && !isIgnored)
