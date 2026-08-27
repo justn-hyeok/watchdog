@@ -47,8 +47,7 @@ final class MetricsAndControlTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
         XCTAssertLessThanOrEqual(CommandRunner.activeProcessCountPreview, 1)
-        try? await Task.sleep(for: .milliseconds(1_100))
-        XCTAssertEqual(CommandRunner.activeProcessCountPreview, 0)
+        await waitForHelperCleanup()
     }
 
     func testAsyncCommandRunnerReturnsPromptlyWhenParentTaskIsCancelled() async {
@@ -72,8 +71,7 @@ final class MetricsAndControlTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
         XCTAssertLessThanOrEqual(CommandRunner.activeProcessCountPreview, 1)
-        try? await Task.sleep(for: .milliseconds(1_100))
-        XCTAssertEqual(CommandRunner.activeProcessCountPreview, 0)
+        await waitForHelperCleanup()
     }
 
     func testAsyncCommandRunnerBoundsTimedOutLiveHelpers() async {
@@ -109,8 +107,7 @@ final class MetricsAndControlTests: XCTestCase {
             return false
         })
         XCTAssertLessThanOrEqual(CommandRunner.activeProcessCountPreview, 3)
-        try? await Task.sleep(for: .milliseconds(1_100))
-        XCTAssertEqual(CommandRunner.activeProcessCountPreview, 0)
+        await waitForHelperCleanup()
     }
 
     func testProcessCPUUsesIntervalDelta() throws {
@@ -360,6 +357,15 @@ final class MetricsAndControlTests: XCTestCase {
         let actor = ProcessActionAuthorizationActor()
         let nonce = try await actor.mint(action: action, identity: process.identity, observation: ObservationToken(generation: 7, instant: instant), at: instant)
         return try await actor.consume(nonce, action: action, identity: process.identity, currentGeneration: 7, at: instant)
+    }
+
+    private func waitForHelperCleanup() async {
+        let deadline = ContinuousClock().now.advanced(by: .seconds(3))
+        while CommandRunner.activeProcessCountPreview != 0,
+              ContinuousClock().now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(CommandRunner.activeProcessCountPreview, 0)
     }
 
     private func controller(_ probe: ControlProbe, currentPID: Int32 = 500, now: ContinuousClock.Instant) -> ProcessController {
