@@ -26,7 +26,7 @@ struct DestructiveActionConfirmationRequest: Sendable {
     fileprivate let id: UUID
     fileprivate let action: ProcessControlAction
     fileprivate let identity: ProcessIdentity
-    fileprivate let observation: ObservationToken
+    fileprivate let requestedAt: ContinuousClock.Instant
 }
 
 enum ProcessActionOutcome: Equatable, Sendable {
@@ -88,8 +88,8 @@ final class ProcessMonitor: ObservableObject {
     private let defaults: UserDefaults
     private let sampler = ProcessSampler()
     private let workingDirectoryResolver = WorkingDirectoryResolver()
-    private let authorization = ProcessActionAuthorizationActor()
-    private let controller = ProcessController()
+    private let authorization: ProcessActionAuthorizationActor
+    private let controller: ProcessController
     private let clock = ContinuousClock()
     private var tracker = HotProcessTracker()
     private var memoryTracker = MemoryProcessTracker()
@@ -99,12 +99,19 @@ final class ProcessMonitor: ObservableObject {
     private var observation: ObservationToken?
     private var generation: UInt64 = 0
     private var notificationCooldowns: [NotificationCooldownKey: ContinuousClock.Instant] = [:]
-    private var pendingConfirmationIDs: Set<UUID> = []
+    private var actionOutcomeRecordedAt: [ProcessIdentity: ContinuousClock.Instant] = [:]
+    private var pendingConfirmations: [UUID: ContinuousClock.Instant] = [:]
     private var ignorePruneCursor = 0
     private var terminationPollTasks: [ProcessIdentity: (id: UUID, task: Task<Void, Never>)] = [:]
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        authorization: ProcessActionAuthorizationActor = ProcessActionAuthorizationActor(),
+        controller: ProcessController = ProcessController()
+    ) {
         self.defaults = defaults
+        self.authorization = authorization
+        self.controller = controller
         threshold = Self.normalizedCPU(defaults.object(forKey: Keys.threshold) as? Double ?? 100)
         sustainedDuration = Self.normalizedDuration(defaults.object(forKey: Keys.sustainedDuration) as? Double ?? 20)
         memoryThresholdGB = Self.normalizedMemory(defaults.object(forKey: Keys.memoryThresholdGB) as? Double ?? 2)
@@ -146,11 +153,11 @@ final class ProcessMonitor: ObservableObject {
             generation = nextGeneration
             let token = ObservationToken(generation: nextGeneration, instant: clock.now)
             observation = token
-            pendingConfirmationIDs.removeAll(keepingCapacity: true)
             let snapshots = OrphanClassifier.classify(sample.processes)
 
             let liveIdentities = Set(snapshots.map(\.identity))
             pruneNotificationCooldowns(liveIdentities: liveIdentities, at: token.instant)
+            pruneActionOutcomes(at: token.instant)
             pruneIgnoredProcesses(liveIdentities: liveIdentities)
 
             let previousHotProcesses = hotProcesses
@@ -214,7 +221,7 @@ final class ProcessMonitor: ObservableObject {
             hotProcesses.removeAll()
             highMemoryProcesses.removeAll()
             await authorization.invalidateAll()
-            pendingConfirmationIDs.removeAll(keepingCapacity: true)
+            pendingConfirmations.removeAll(keepingCapacity: true)
             await workingDirectoryResolver.cancel(generation: generation)
         }
     }
@@ -308,34 +315,36 @@ final class ProcessMonitor: ObservableObject {
         for process: ProcessSnapshot
     ) throws -> DestructiveActionConfirmationRequest {
         guard action.isDestructive,
-              let observation,
+              observation != nil,
               actionability(of: process).canAct,
               processes.contains(where: { $0.identity == process.identity })
         else {
             throw ProcessControlError.staleObservation
         }
-        guard pendingConfirmationIDs.count < 256 else {
+        let requestedAt = clock.now
+        pendingConfirmations = pendingConfirmations.filter {
+            requestedAt < $0.value.advanced(by: .seconds(30))
+        }
+        guard pendingConfirmations.count < 256 else {
             throw ProcessControlError.authorizationCapacityReached
         }
         let request = DestructiveActionConfirmationRequest(
             id: UUID(),
             action: action,
             identity: process.identity,
-            observation: observation
+            requestedAt: requestedAt
         )
-        pendingConfirmationIDs.insert(request.id)
+        pendingConfirmations[request.id] = requestedAt
         return request
     }
 
     func completeDestructiveConfirmation(
         _ request: DestructiveActionConfirmationRequest
     ) async throws {
-        guard pendingConfirmationIDs.remove(request.id) != nil,
+        guard pendingConfirmations.removeValue(forKey: request.id) == request.requestedAt,
               request.action.isDestructive,
               let observation,
-              observation.generation == request.observation.generation,
-              observation.instant == request.observation.instant,
-              clock.now < request.observation.instant.advanced(by: .seconds(5)),
+              clock.now < request.requestedAt.advanced(by: .seconds(30)),
               processes.contains(where: { $0.identity == request.identity }),
               let process = processes.first(where: { $0.identity == request.identity }),
               actionability(of: process).canAct
@@ -345,7 +354,7 @@ final class ProcessMonitor: ObservableObject {
         let nonce = try await authorization.mint(
             action: request.action,
             identity: request.identity,
-            observation: request.observation,
+            observation: observation,
             at: clock.now
         )
         try await consumeAction(nonce, action: request.action, process: process)
@@ -411,6 +420,11 @@ final class ProcessMonitor: ObservableObject {
         )
     }
 
+    func refreshActionablePreviewObservation() {
+        generation &+= 1
+        observation = ObservationToken(generation: generation, instant: clock.now)
+    }
+
     func loadPreview(
         processes: [ProcessSnapshot],
         hotProcesses: Set<ProcessIdentity>,
@@ -440,7 +454,11 @@ final class ProcessMonitor: ObservableObject {
     }
 
     func setActionOutcomePreview(_ outcome: ProcessActionOutcome, for process: ProcessSnapshot) {
-        actionOutcomes[process.identity] = outcome
+        recordActionOutcome(outcome, for: process.identity)
+    }
+
+    func pruneActionOutcomesPreview(at instant: ContinuousClock.Instant) {
+        pruneActionOutcomes(at: instant)
     }
 
     func reserveNotificationPreview(
@@ -498,14 +516,21 @@ final class ProcessMonitor: ObservableObject {
             currentGeneration: observation.generation,
             at: instant
         )
+        guard let currentObservation = self.observation,
+              currentObservation.generation == authorized.observationGeneration,
+              actionability(of: process).canAct,
+              processes.contains(where: { $0.identity == process.identity })
+        else {
+            throw ProcessControlError.staleObservation
+        }
         try controller.execute(
             authorized,
-            currentGeneration: observation.generation
+            currentGeneration: currentObservation.generation
         )
-        actionOutcomes[process.identity] = .signalDelivered
+        recordActionOutcome(.signalDelivered, for: process.identity)
 
         if action.isDestructive {
-            actionOutcomes[process.identity] = .awaitingExit
+            recordActionOutcome(.awaitingExit, for: process.identity)
             pollTerminationOutcome(for: process.identity)
         }
     }
@@ -521,7 +546,7 @@ final class ProcessMonitor: ObservableObject {
                 try await consumeAction(nonce, action: action, process: process)
                 showFeedback(.init(kind: .success, message: message))
             } catch {
-                actionOutcomes[process.identity] = .failed(error.localizedDescription)
+                recordActionOutcome(.failed(error.localizedDescription), for: process.identity)
                 showFeedback(.init(kind: .error, message: error.localizedDescription))
             }
         }
@@ -587,11 +612,11 @@ final class ProcessMonitor: ObservableObject {
                 }.value
                 guard !Task.isCancelled else { return }
                 if let outcome = Self.terminationOutcome(for: lookup, identity: identity) {
-                    self.actionOutcomes[identity] = outcome
+                    self.recordActionOutcome(outcome, for: identity)
                     return
                 }
                 if attempt == 19 {
-                    self.actionOutcomes[identity] = .stillRunning
+                    self.recordActionOutcome(.stillRunning, for: identity)
                 }
             }
         }
@@ -613,6 +638,29 @@ final class ProcessMonitor: ObservableObject {
     private func finishTerminationPoll(identity: ProcessIdentity, id: UUID) {
         guard terminationPollTasks[identity]?.id == id else { return }
         terminationPollTasks[identity] = nil
+    }
+
+    private func recordActionOutcome(
+        _ outcome: ProcessActionOutcome,
+        for identity: ProcessIdentity
+    ) {
+        let recordedAt = clock.now
+        actionOutcomes[identity] = outcome
+        actionOutcomeRecordedAt[identity] = recordedAt
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(30))
+            guard self?.actionOutcomeRecordedAt[identity] == recordedAt else { return }
+            self?.actionOutcomeRecordedAt[identity] = nil
+            self?.actionOutcomes[identity] = nil
+        }
+    }
+
+    private func pruneActionOutcomes(at instant: ContinuousClock.Instant) {
+        let retained = actionOutcomeRecordedAt.filter {
+            $0.value.duration(to: instant) < .seconds(30)
+        }
+        actionOutcomeRecordedAt = retained
+        actionOutcomes = actionOutcomes.filter { retained[$0.key] != nil }
     }
 
     private func showFeedback(_ feedback: ActionFeedback) {

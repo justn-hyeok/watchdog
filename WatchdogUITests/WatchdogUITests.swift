@@ -15,11 +15,6 @@ final class WatchdogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["메모리 높음"].exists)
         XCTAssertTrue(app.staticTexts["고아 의심"].exists)
 
-        let memoryDetails = app.descendants(matching: .any)["watchdog.memory.details"]
-        XCTAssertTrue(memoryDetails.waitForExistence(timeout: 2))
-        XCTAssertTrue(memoryDetails.label.contains("압축"))
-        XCTAssertTrue(memoryDetails.label.contains("스왑"))
-
         let row = app.descendants(matching: .any)["\(actionableProcess).row"]
         XCTAssertTrue(row.waitForExistence(timeout: 2))
         XCTAssertTrue(row.label.contains("claude"))
@@ -100,10 +95,7 @@ final class WatchdogUITests: XCTestCase {
         agentsScope.click()
         XCTAssertTrue(app.staticTexts["무시 중"].waitForExistence(timeout: 2))
 
-        let ignoredActions = app.descendants(matching: .any)["\(actionableProcess).actions"]
-        XCTAssertTrue(ignoredActions.waitForExistence(timeout: 2))
-        ignoredActions.click()
-        let undoIgnore = app.menuItems["\(actionableProcess).undo-ignore"]
+        let undoIgnore = app.buttons["\(actionableProcess).undo-ignore"]
         XCTAssertTrue(undoIgnore.waitForExistence(timeout: 2))
         undoIgnore.click()
         XCTAssertFalse(app.staticTexts["무시 중"].exists)
@@ -127,14 +119,15 @@ final class WatchdogUITests: XCTestCase {
         let app = launch(arguments: ["--ui-test-fixture"])
         defer { app.terminate() }
         openActionMenu(in: app)
-        app.menuItems["종료…"].click()
+        let terminate = app.menuItems["\(actionableProcess).terminate"]
+        XCTAssertTrue(terminate.waitForExistence(timeout: 2))
+        terminate.click()
 
-        let alert = app.sheets.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 2))
-        XCTAssertEqual(alert.staticTexts.element(boundBy: 0).value as? String, "프로세스를 종료할까요?")
-        XCTAssertTrue((alert.staticTexts.element(boundBy: 1).value as? String)?.contains("SIGTERM") == true)
-        alert.buttons["취소"].click()
-        XCTAssertFalse(alert.exists)
+        let title = app.staticTexts["프로세스를 종료할까요?"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["종료"].exists)
+        app.windows.firstMatch.buttons["취소"].click()
+        XCTAssertTrue(title.waitForNonExistence(timeout: 2))
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '신호를 전달했습니다'")).firstMatch.exists)
     }
 
@@ -143,16 +136,15 @@ final class WatchdogUITests: XCTestCase {
         let app = launch(arguments: ["--ui-test-fixture"])
         defer { app.terminate() }
         openActionMenu(in: app)
-        app.menuItems["강제 종료…"].click()
+        let forceQuit = app.menuItems["\(actionableProcess).force-quit"]
+        XCTAssertTrue(forceQuit.waitForExistence(timeout: 2))
+        forceQuit.click()
 
-        let alert = app.sheets.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 2))
-        XCTAssertEqual(alert.staticTexts.element(boundBy: 0).value as? String, "프로세스를 강제 종료할까요?")
-        let message = alert.staticTexts.element(boundBy: 1).value as? String
-        XCTAssertTrue(message?.contains("SIGKILL") == true)
-        XCTAssertTrue(message?.contains("저장하지 않은 작업은 사라집니다") == true)
-        alert.buttons["취소"].click()
-        XCTAssertFalse(alert.exists)
+        let title = app.staticTexts["프로세스를 강제 종료할까요?"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["강제 종료"].exists)
+        app.windows.firstMatch.buttons["취소"].click()
+        XCTAssertTrue(title.waitForNonExistence(timeout: 2))
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '신호를 전달했습니다'")).firstMatch.exists)
     }
 

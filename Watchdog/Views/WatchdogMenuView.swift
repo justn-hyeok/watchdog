@@ -35,6 +35,11 @@ private struct MenuActionFeedback: Identifiable {
     let message: String
 }
 
+private struct LocalActionFailure {
+    let id = UUID()
+    let message: String
+}
+
 private struct ProcessOutcomeSummary: Identifiable {
     let identity: ProcessIdentity
     let text: String
@@ -51,7 +56,7 @@ struct WatchdogMenuView: View {
     @State private var showsRules = false
     @State private var pendingAction: PendingProcessAction?
     @State private var menuActionFeedback: MenuActionFeedback?
-    @State private var localActionFailures: [ProcessIdentity: String] = [:]
+    @State private var localActionFailures: [ProcessIdentity: LocalActionFailure] = [:]
 
     private var visibleProcesses: [ProcessSnapshot] {
         monitor.visibleProcesses(scope: scope, search: search)
@@ -132,7 +137,11 @@ struct WatchdogMenuView: View {
                 .font(.system(size: 9.5, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("메모리 세부 정보")
+                .accessibilityValue(
+                    "압축 \(formattedMemory(memory.compressedBytes)) · \(swapSummary(memory))"
+                )
                 .accessibilityIdentifier("watchdog.memory.details")
             }
         }
@@ -480,7 +489,7 @@ struct WatchdogMenuView: View {
             guard monitor.actionOutcomes[entry.key] == nil else { return nil }
             return ProcessOutcomeSummary(
                 identity: entry.key,
-                text: "PID \(entry.key.pid) · 작업 실패: \(entry.value)",
+                text: "PID \(entry.key.pid) · 작업 실패: \(entry.value.message)",
                 isError: true
             )
         }
@@ -525,7 +534,7 @@ struct WatchdogMenuView: View {
                 confirmationRequest: request
             )
         } catch {
-            localActionFailures[process.identity] = error.localizedDescription
+            recordLocalActionFailure(error.localizedDescription, for: process.identity)
             showMenuFeedback(.init(isError: true, message: error.localizedDescription))
         }
     }
@@ -544,7 +553,10 @@ struct WatchdogMenuView: View {
                 }
                 showMenuFeedback(.init(isError: false, message: message))
             } catch {
-                localActionFailures[pending.process.identity] = error.localizedDescription
+                recordLocalActionFailure(
+                    error.localizedDescription,
+                    for: pending.process.identity
+                )
                 showMenuFeedback(.init(isError: true, message: error.localizedDescription))
             }
         }
@@ -554,7 +566,7 @@ struct WatchdogMenuView: View {
         if let outcome = monitor.actionOutcomes[process.identity] {
             return outcome
         }
-        return localActionFailures[process.identity].map { .failed($0) }
+        return localActionFailures[process.identity].map { .failed($0.message) }
     }
 
     private func showMenuFeedback(_ feedback: MenuActionFeedback) {
@@ -563,6 +575,19 @@ struct WatchdogMenuView: View {
             try? await Task.sleep(for: .seconds(4))
             guard menuActionFeedback?.id == feedback.id else { return }
             menuActionFeedback = nil
+        }
+    }
+
+    private func recordLocalActionFailure(
+        _ message: String,
+        for identity: ProcessIdentity
+    ) {
+        let failure = LocalActionFailure(message: message)
+        localActionFailures[identity] = failure
+        Task {
+            try? await Task.sleep(for: .seconds(30))
+            guard localActionFailures[identity]?.id == failure.id else { return }
+            localActionFailures[identity] = nil
         }
     }
 }

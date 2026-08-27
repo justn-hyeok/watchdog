@@ -39,6 +39,16 @@ jobs:
             test \
             -only-testing:WatchdogTests
 
+      - name: Run shipping UI safety tests
+        run: |
+          xcodebuild \
+            -project Watchdog.xcodeproj \
+            -scheme Watchdog \
+            -configuration Debug \
+            -derivedDataPath DerivedData/ui \
+            test \
+            -only-testing:WatchdogUITests
+
       - name: Build Debug
         run: |
           xcodebuild \

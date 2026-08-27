@@ -36,8 +36,8 @@ final class MetricsAndControlTests: XCTestCase {
         let started = ContinuousClock().now
         do {
             _ = try await CommandRunner.run(
-                "/bin/sleep",
-                arguments: ["5"],
+                "/bin/sh",
+                arguments: ["-c", "trap '' TERM; sleep 1"],
                 deadline: .milliseconds(100)
             )
             XCTFail("Expected command deadline")
@@ -46,6 +46,68 @@ final class MetricsAndControlTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+        XCTAssertLessThanOrEqual(CommandRunner.activeProcessCountPreview, 1)
+        await waitForHelperCleanup()
+    }
+
+    func testAsyncCommandRunnerReturnsPromptlyWhenParentTaskIsCancelled() async {
+        let started = ContinuousClock().now
+        let task = Task {
+            try await CommandRunner.run(
+                "/bin/sh",
+                arguments: ["-c", "trap '' TERM; sleep 1"],
+                deadline: .seconds(10)
+            )
+        }
+        try? await Task.sleep(for: .milliseconds(100))
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected command cancellation")
+        } catch CommandRunnerError.cancelled {
+            XCTAssertLessThan(started.duration(to: ContinuousClock().now), .seconds(2))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        XCTAssertLessThanOrEqual(CommandRunner.activeProcessCountPreview, 1)
+        await waitForHelperCleanup()
+    }
+
+    func testAsyncCommandRunnerBoundsTimedOutLiveHelpers() async {
+        let errors = await withTaskGroup(of: CommandRunnerError?.self) { group in
+            for _ in 0..<4 {
+                group.addTask {
+                    do {
+                        _ = try await CommandRunner.run(
+                            "/bin/sh",
+                            arguments: ["-c", "trap '' TERM; sleep 1"],
+                            deadline: .milliseconds(100)
+                        )
+                        return nil
+                    } catch let error as CommandRunnerError {
+                        return error
+                    } catch {
+                        return nil
+                    }
+                }
+            }
+            var errors: [CommandRunnerError] = []
+            for await error in group {
+                if let error {
+                    errors.append(error)
+                }
+            }
+            return errors
+        }
+
+        XCTAssertEqual(errors.count, 4)
+        XCTAssertTrue(errors.contains {
+            if case .resourceLimit = $0 { return true }
+            return false
+        })
+        XCTAssertLessThanOrEqual(CommandRunner.activeProcessCountPreview, 3)
+        await waitForHelperCleanup()
     }
 
     func testProcessCPUUsesIntervalDelta() throws {
@@ -295,6 +357,15 @@ final class MetricsAndControlTests: XCTestCase {
         let actor = ProcessActionAuthorizationActor()
         let nonce = try await actor.mint(action: action, identity: process.identity, observation: ObservationToken(generation: 7, instant: instant), at: instant)
         return try await actor.consume(nonce, action: action, identity: process.identity, currentGeneration: 7, at: instant)
+    }
+
+    private func waitForHelperCleanup() async {
+        let deadline = ContinuousClock().now.advanced(by: .seconds(3))
+        while CommandRunner.activeProcessCountPreview != 0,
+              ContinuousClock().now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(CommandRunner.activeProcessCountPreview, 0)
     }
 
     private func controller(_ probe: ControlProbe, currentPID: Int32 = 500, now: ContinuousClock.Instant) -> ProcessController {

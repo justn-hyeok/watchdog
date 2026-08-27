@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import Darwin
 import SwiftUI
 
 #if DEBUG
@@ -28,6 +29,14 @@ private enum WatchdogUITestFixtureHost {
 
 @MainActor
 final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
+    private enum InstanceLockResult {
+        case acquired
+        case heldByAnotherInstance
+        case unavailable
+    }
+
+    private var instanceLockFileDescriptor: Int32 = -1
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
@@ -36,6 +45,16 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
             || arguments.contains("--ui-test-outcome-fixture")
             || arguments.contains("--ui-test-exited-fixture")
             || arguments.contains("--ui-test-still-running-fixture")
+        if !isUITestFixture {
+            switch acquireInstanceLock() {
+            case .heldByAnotherInstance:
+                activateExistingInstanceIfPresent()
+                NSApplication.shared.terminate(nil)
+                return
+            case .acquired, .unavailable:
+                break
+            }
+        }
         NSApplication.shared.setActivationPolicy(isUITestFixture ? .regular : .accessory)
         if isUITestFixture {
             Task { @MainActor in
@@ -45,18 +64,67 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         #else
+        if case .heldByAnotherInstance = acquireInstanceLock() {
+            activateExistingInstanceIfPresent()
+            NSApplication.shared.terminate(nil)
+            return
+        }
         NSApplication.shared.setActivationPolicy(.accessory)
         #endif
-        terminateOlderInstances()
     }
 
-    private func terminateOlderInstances() {
-        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
-
-        for application in NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
-        where application.processIdentifier != getpid() {
-            application.terminate()
+    private func acquireInstanceLock() -> InstanceLockResult {
+        guard let applicationSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first else {
+            return .unavailable
         }
+        let directory = applicationSupport.appendingPathComponent("Watchdog", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            return .unavailable
+        }
+
+        let descriptor = Darwin.open(
+            directory.appendingPathComponent("instance.lock").path,
+            O_CREAT | O_RDWR,
+            S_IRUSR | S_IWUSR
+        )
+        guard descriptor >= 0 else { return .unavailable }
+        var fileLock = Darwin.flock()
+        fileLock.l_start = 0
+        fileLock.l_len = 0
+        fileLock.l_pid = 0
+        fileLock.l_type = Int16(F_WRLCK)
+        fileLock.l_whence = Int16(SEEK_SET)
+        guard fcntl(descriptor, F_SETLK, &fileLock) == 0 else {
+            let lockError = errno
+            Darwin.close(descriptor)
+            return lockError == EACCES || lockError == EAGAIN
+                ? .heldByAnotherInstance
+                : .unavailable
+        }
+        instanceLockFileDescriptor = descriptor
+        return .acquired
+    }
+
+    private func activateExistingInstanceIfPresent() {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
+        guard let existing = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .filter({ $0.processIdentifier != getpid() })
+            .min(by: {
+                ($0.launchDate ?? .distantFuture) < ($1.launchDate ?? .distantFuture)
+            })
+        else {
+            return
+        }
+        existing.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
     }
 }
 
@@ -91,6 +159,12 @@ struct WatchdogApp: App {
                 monitor.setActionOutcomePreview(.exited, for: Self.fixtureProcesses[0])
             } else if usesStillRunningFixture {
                 monitor.setActionOutcomePreview(.stillRunning, for: Self.fixtureProcesses[0])
+            }
+            Task { @MainActor in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(2))
+                    monitor.refreshActionablePreviewObservation()
+                }
             }
         } else if usesStaleFixture {
             monitor.loadStalePreview(

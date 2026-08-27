@@ -250,21 +250,115 @@ final class ProcessMonitorTests: XCTestCase {
         await fulfillment(of: [unexpected], timeout: 0.05)
     }
 
-    func testDestructiveConfirmationRejectsOriginalGenerationAfterRefresh() async throws {
-        let monitor = makeMonitor()
+    func testDestructiveConfirmationUsesFreshObservationAfterRefresh() async throws {
+        let signals = LockedSignals()
         let process = snapshot(pid: 5_500, name: "/usr/local/bin/gjc")
+        let controller = ProcessController(
+            factsReader: { _ in
+                .found(
+                    LiveProcessFacts(
+                        identity: process.identity,
+                        executablePath: process.executablePath,
+                        isSuspended: false
+                    )
+                )
+            },
+            signalSender: { pid, signal in
+                signals.record(pid: pid, signal: signal)
+                return 0
+            }
+        )
+        let monitor = ProcessMonitor(defaults: makeDefaults(), controller: controller)
         monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
         let request = try monitor.destructiveActionRequest(.terminate, for: process)
 
         monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
+        try await monitor.completeDestructiveConfirmation(request)
+
+        XCTAssertEqual(signals.values.count, 1)
+        XCTAssertEqual(signals.values.first?.pid, process.id)
+        XCTAssertEqual(signals.values.first?.signal, SIGTERM)
+    }
+
+    func testDestructiveConfirmationRejectsChangedIdentityAfterRefresh() async throws {
+        let signals = LockedSignals()
+        let process = snapshot(pid: 5_500, name: "/usr/local/bin/gjc", startTime: 1)
+        let replacement = snapshot(pid: 5_500, name: "/usr/local/bin/gjc", startTime: 2)
+        let controller = ProcessController(
+            factsReader: { _ in
+                .found(
+                    LiveProcessFacts(
+                        identity: replacement.identity,
+                        executablePath: replacement.executablePath,
+                        isSuspended: false
+                    )
+                )
+            },
+            signalSender: { pid, signal in
+                signals.record(pid: pid, signal: signal)
+                return 0
+            }
+        )
+        let monitor = ProcessMonitor(defaults: makeDefaults(), controller: controller)
+        monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
+        let request = try monitor.destructiveActionRequest(.terminate, for: process)
+        monitor.loadActionablePreview(processes: [replacement], hotProcesses: [], updatedAt: Date())
 
         do {
             try await monitor.completeDestructiveConfirmation(request)
-            XCTFail("A confirmation from an older observation must not signal")
+            XCTFail("A confirmation must remain bound to the original process identity")
         } catch ProcessControlError.staleObservation {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+        XCTAssertTrue(signals.values.isEmpty)
+    }
+
+    func testConsumedAuthorizationCannotSignalAfterGenerationChanges() async throws {
+        let gate = AuthorizationConsumeGate()
+        let authorization = ProcessActionAuthorizationActor(
+            consumeHook: { await gate.wait() }
+        )
+        let signals = LockedSignals()
+        let process = snapshot(pid: 5_503, name: "/usr/local/bin/gjc")
+        let controller = ProcessController(
+            factsReader: { _ in
+                .found(
+                    LiveProcessFacts(
+                        identity: process.identity,
+                        executablePath: process.executablePath,
+                        isSuspended: false
+                    )
+                )
+            },
+            signalSender: { pid, signal in
+                signals.record(pid: pid, signal: signal)
+                return 0
+            }
+        )
+        let monitor = ProcessMonitor(
+            defaults: makeDefaults(),
+            authorization: authorization,
+            controller: controller
+        )
+        monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
+        let request = try monitor.destructiveActionRequest(.terminate, for: process)
+
+        let completion = Task {
+            try await monitor.completeDestructiveConfirmation(request)
+        }
+        await gate.waitUntilEntered()
+        monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
+        await gate.release()
+
+        do {
+            try await completion.value
+            XCTFail("An authorization consumed for an old generation must not signal")
+        } catch ProcessControlError.staleObservation {
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        XCTAssertTrue(signals.values.isEmpty)
     }
 
     func testLateWorkingDirectoryResultCannotMergeIntoNewGeneration() {
@@ -326,16 +420,39 @@ final class ProcessMonitorTests: XCTestCase {
     }
 
     func testTerminationPollIsDeduplicatedPerIdentityAndCleansUp() async {
-        let monitor = makeMonitor()
+        let lookupStarted = expectation(description: "termination lookup")
+        lookupStarted.assertForOverFulfill = false
+        let controller = ProcessController(factsReader: { _ in
+            lookupStarted.fulfill()
+            return .absent
+        })
+        let monitor = ProcessMonitor(defaults: makeDefaults(), controller: controller)
         let identity = ProcessIdentity(pid: 99_991, startTimeMicroseconds: 1, userID: getuid())
 
         monitor.startTerminationPollPreview(for: identity)
         monitor.startTerminationPollPreview(for: identity)
         XCTAssertEqual(monitor.terminationPollCountPreview, 1)
 
-        try? await Task.sleep(for: .milliseconds(700))
+        await fulfillment(of: [lookupStarted], timeout: 1)
+        let deadline = ContinuousClock().now.advanced(by: .seconds(1))
+        while monitor.terminationPollCountPreview != 0, ContinuousClock().now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         XCTAssertEqual(monitor.terminationPollCountPreview, 0)
         XCTAssertEqual(monitor.actionOutcomes[identity], .exited)
+    }
+
+    func testActionOutcomesExpireAfterThirtySeconds() {
+        let monitor = makeMonitor()
+        let process = snapshot(pid: 99_992, name: "/usr/local/bin/gjc")
+        let instant = ContinuousClock().now
+
+        monitor.setActionOutcomePreview(.exited, for: process)
+        monitor.pruneActionOutcomesPreview(at: instant.advanced(by: .seconds(29)))
+        XCTAssertEqual(monitor.actionOutcomes[process.identity], .exited)
+
+        monitor.pruneActionOutcomesPreview(at: instant.advanced(by: .seconds(31)))
+        XCTAssertNil(monitor.actionOutcomes[process.identity])
     }
 
     private func resolveAndWait(
@@ -392,6 +509,51 @@ final class ProcessMonitorTests: XCTestCase {
             startTimeMicroseconds: startTime ?? UInt64(pid) * 1_000_000,
             workingDirectory: nil
         )
+    }
+}
+
+private actor AuthorizationConsumeGate {
+    private var entered = false
+    private var released = false
+    private var entryWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        entered = true
+        for waiter in entryWaiters {
+            waiter.resume()
+        }
+        entryWaiters.removeAll()
+        guard !released else { return }
+        await withCheckedContinuation { releaseWaiters.append($0) }
+    }
+
+    func waitUntilEntered() async {
+        guard !entered else { return }
+        await withCheckedContinuation { entryWaiters.append($0) }
+    }
+
+    func release() {
+        released = true
+        for waiter in releaseWaiters {
+            waiter.resume()
+        }
+        releaseWaiters.removeAll()
+    }
+}
+
+private final class LockedSignals: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [(pid: Int32, signal: Int32)] = []
+
+    var values: [(pid: Int32, signal: Int32)] {
+        lock.withLock { storage }
+    }
+
+    func record(pid: Int32, signal: Int32) {
+        lock.withLock {
+            storage.append((pid, signal))
+        }
     }
 }
 
