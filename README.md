@@ -89,17 +89,11 @@ xcodebuild -project Watchdog.xcodeproj -scheme Watchdog -configuration Release b
 
 `project.yml`이 Xcode 프로젝트 구성의 유일한 기준입니다. 대상이나 파일 배치를 변경한 뒤에는 XcodeGen으로 프로젝트를 재생성합니다.
 
-## 정식 배포 게이트
+## 배포 정책
 
-현재 베타는 Apple Developer ID 공증 전 빌드입니다. 경고 없는 정식 배포판은 다음 증거가 모두 있어야 합니다.
+Watchdog는 유료 Apple Developer Program에 의존하지 않는 공개 베타로 배포합니다. Developer ID 공증은 현재 릴리스 조건이 아니며, 사용자는 최초 실행 시 macOS의 앱별 승인 절차를 거쳐야 합니다. 공식 GitHub Releases, 고정 SHA-256, 코드 서명 구조 검증, 재현 가능한 소스 빌드 절차로 배포 무결성을 보완합니다.
 
-1. 단위·통합·UI 테스트 결과 번들
-2. Debug/Release 빌드와 앱 실행·프로세스 생존 스모크
-3. 장기 실행 중 단일 감시 루프, 제한된 `lsof` 동시성, 안정적인 CPU·메모리·파일 디스크립터 사용량
-4. Developer ID로 서명된 hardened-runtime 앱과 올바른 Team ID
-5. Apple 공증 `Accepted`, staple 검증, staple 후 Gatekeeper 통과
-
-서명 인증서, Team ID, 공증 프로필과 export plist는 릴리스 환경에서만 제공하며 저장소에 커밋하지 않습니다.
+단위·통합·UI 테스트, Debug/Release 빌드, 앱 실행 스모크와 장기 실행 리소스 검증은 공증 여부와 관계없이 릴리스 품질 게이트로 유지합니다. 향후 공증 배포를 선택할 경우에만 Developer ID 서명, 올바른 Team ID, Apple 공증 `Accepted`, stapling과 Gatekeeper 검증을 추가로 요구합니다.
 
 ## 라이선스
 
