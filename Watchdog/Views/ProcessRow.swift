@@ -81,37 +81,47 @@ struct ProcessRow: View {
             .accessibilityHint(actionability.canAct ? "" : nonActionableReason)
             .accessibilityIdentifier(controlIdentifier(process.isSuspended ? "resume" : "suspend"))
 
-            Menu {
+            Group {
                 if isIgnored {
-                    Button("무시 취소", systemImage: "bell", action: onUndoIgnore)
-                        .accessibilityIdentifier(controlIdentifier("undo-ignore"))
-                } else if actionability.canAct {
-                    if process.isSuspended {
-                        Button("재개", systemImage: "play.fill", action: onResume)
-                    } else {
-                        Button("일시 정지", systemImage: "pause.fill", action: onSuspend)
+                    Button(action: onUndoIgnore) {
+                        Image(systemName: "bell")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
                     }
+                    .buttonStyle(.plain)
+                    .help("무시 취소")
+                    .accessibilityLabel("무시 취소")
+                    .accessibilityIdentifier(controlIdentifier("undo-ignore"))
+                } else {
+                    Menu {
+                        if actionability.canAct {
+                            if process.isSuspended {
+                                Button("재개", systemImage: "play.fill", action: onResume)
+                            } else {
+                                Button("일시 정지", systemImage: "pause.fill", action: onSuspend)
+                            }
 
-                    Button("종료할 때까지 무시", systemImage: "bell.slash", action: onIgnore)
-                        .accessibilityIdentifier(controlIdentifier("ignore"))
-                    Divider()
-                    Button("종료…", systemImage: "xmark.circle", action: onTerminate)
-                        .accessibilityIdentifier(controlIdentifier("terminate"))
-                    Button("강제 종료…", systemImage: "bolt.trianglebadge.exclamationmark", role: .destructive, action: onForceQuit)
-                        .accessibilityIdentifier(controlIdentifier("force-quit"))
+                            Button("종료할 때까지 무시", systemImage: "bell.slash", action: onIgnore)
+                                .accessibilityIdentifier(controlIdentifier("ignore"))
+                            Divider()
+                            Button("종료…", systemImage: "xmark.circle", action: onTerminate)
+                                .accessibilityIdentifier(controlIdentifier("terminate"))
+                            Button("강제 종료…", systemImage: "bolt.trianglebadge.exclamationmark", role: .destructive, action: onForceQuit)
+                                .accessibilityIdentifier(controlIdentifier("force-quit"))
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .foregroundStyle(actionability.canAct ? .secondary : .tertiary)
+                            .accessibilityLabel("프로세스 작업")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .disabled(!actionability.canAct)
+                    .help(actionability.canAct ? "프로세스 작업" : nonActionableReason)
+                    .accessibilityHint(actionability.canAct ? "" : nonActionableReason)
+                    .accessibilityIdentifier(controlIdentifier("actions"))
                 }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(actionability.canAct || isIgnored ? .secondary : .tertiary)
-                    .accessibilityLabel("프로세스 작업")
             }
-            .id(isIgnored)
-            .menuStyle(.borderlessButton)
             .frame(width: 24)
-            .disabled(!actionability.canAct && !isIgnored)
-            .help(actionability.canAct || isIgnored ? "프로세스 작업" : nonActionableReason)
-            .accessibilityHint(actionability.canAct || isIgnored ? "" : nonActionableReason)
-            .accessibilityIdentifier(controlIdentifier("actions"))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)

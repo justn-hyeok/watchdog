@@ -95,10 +95,7 @@ final class WatchdogUITests: XCTestCase {
         agentsScope.click()
         XCTAssertTrue(app.staticTexts["무시 중"].waitForExistence(timeout: 2))
 
-        let ignoredActions = app.descendants(matching: .any)["\(actionableProcess).actions"]
-        XCTAssertTrue(ignoredActions.waitForExistence(timeout: 2))
-        ignoredActions.click()
-        let undoIgnore = app.menuItems["무시 취소"]
+        let undoIgnore = app.buttons["\(actionableProcess).undo-ignore"]
         XCTAssertTrue(undoIgnore.waitForExistence(timeout: 2))
         undoIgnore.click()
         XCTAssertFalse(app.staticTexts["무시 중"].exists)
@@ -122,7 +119,7 @@ final class WatchdogUITests: XCTestCase {
         let app = launch(arguments: ["--ui-test-fixture"])
         defer { app.terminate() }
         openActionMenu(in: app)
-        let terminate = app.menuItems["종료…"]
+        let terminate = app.menuItems["\(actionableProcess).terminate"]
         XCTAssertTrue(terminate.waitForExistence(timeout: 2))
         terminate.click()
 
@@ -139,7 +136,7 @@ final class WatchdogUITests: XCTestCase {
         let app = launch(arguments: ["--ui-test-fixture"])
         defer { app.terminate() }
         openActionMenu(in: app)
-        let forceQuit = app.menuItems["강제 종료…"]
+        let forceQuit = app.menuItems["\(actionableProcess).force-quit"]
         XCTAssertTrue(forceQuit.waitForExistence(timeout: 2))
         forceQuit.click()
 
