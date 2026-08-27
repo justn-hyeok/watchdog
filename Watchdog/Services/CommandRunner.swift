@@ -5,6 +5,7 @@ enum CommandRunnerError: LocalizedError, Sendable {
     case failed(executable: String, status: Int32, message: String)
     case timedOut(executable: String)
     case cancelled(executable: String)
+    case resourceLimit(executable: String)
 
     var errorDescription: String? {
         switch self {
@@ -17,11 +18,15 @@ enum CommandRunnerError: LocalizedError, Sendable {
             return "\(executable) 실행 시간 초과"
         case let .cancelled(executable):
             return "\(executable) 실행 취소됨"
+        case let .resourceLimit(executable):
+            return "\(executable) 실행 대기 한도 초과"
         }
     }
 }
 
 enum CommandRunner {
+    private static let admission = HelperProcessAdmission(capacity: 3)
+
     static func run(
         _ executable: String,
         arguments: [String],
@@ -34,7 +39,14 @@ enum CommandRunner {
                 try Task.checkCancellation()
                 return try await withCheckedThrowingContinuation { continuation in
                     guard state.install(continuation) else { return }
+                    guard admission.acquire() else {
+                        state.complete(
+                            .failure(CommandRunnerError.resourceLimit(executable: executable))
+                        )
+                        return
+                    }
                     DispatchQueue.global(qos: .utility).async {
+                        defer { admission.release() }
                         do {
                             let result = try runChild(
                                 executable,
@@ -62,6 +74,10 @@ enum CommandRunner {
             throw CommandRunnerError.cancelled(executable: executable)
         }
     }
+
+#if DEBUG
+    static var activeProcessCountPreview: Int { admission.activeCount }
+#endif
 
     private static func runChild(
         _ executable: String,
@@ -133,6 +149,35 @@ enum CommandRunner {
     private static func close(_ pipe: Pipe) {
         try? pipe.fileHandleForReading.close()
         try? pipe.fileHandleForWriting.close()
+    }
+}
+
+private final class HelperProcessAdmission: @unchecked Sendable {
+    private let lock = NSLock()
+    private let capacity: Int
+    private var active = 0
+
+    init(capacity: Int) {
+        self.capacity = max(1, capacity)
+    }
+
+    func acquire() -> Bool {
+        lock.withLock {
+            guard active < capacity else { return false }
+            active += 1
+            return true
+        }
+    }
+
+    func release() {
+        lock.withLock {
+            precondition(active > 0)
+            active -= 1
+        }
+    }
+
+    var activeCount: Int {
+        lock.withLock { active }
     }
 }
 

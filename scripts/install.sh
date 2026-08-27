@@ -53,7 +53,7 @@ done
   exit 1
 }
 
-for command in curl shasum ditto codesign pgrep ps; do
+for command in curl shasum ditto codesign lsof pgrep; do
   command -v "$command" >/dev/null || {
     echo "Required command not found: $command" >&2
     exit 1
@@ -98,26 +98,33 @@ backup_app="$install_dir/.Watchdog.app.backup.$$"
 
 if [[ -d "$target_app" ]]; then
   target_executable="$target_app/Contents/MacOS/Watchdog"
+  is_installed_process() {
+    local pid="$1"
+    local line
+    while IFS= read -r line; do
+      [[ "$line" == n* ]] || continue
+      [[ "${line#n}" == "$target_executable" ]] && return 0
+    done < <(lsof -a -p "$pid" -d txt -Fn 2>/dev/null || true)
+    return 1
+  }
+
   running_pids=()
   while IFS= read -r pid; do
     [[ -n "$pid" ]] || continue
-    command_path="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-    [[ "$command_path" == "$target_executable" ]] || continue
+    is_installed_process "$pid" || continue
     running_pids+=("$pid")
   done < <(pgrep -x Watchdog || true)
 
   if ((${#running_pids[@]})); then
     echo "Stopping the installed Watchdog gracefully…"
     for pid in "${running_pids[@]}"; do
-      command_path="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-      [[ "$command_path" == "$target_executable" ]] || continue
+      is_installed_process "$pid" || continue
       /bin/kill -TERM "$pid"
     done
     for _ in 1 2 3 4 5; do
       still_running=false
       for pid in "${running_pids[@]}"; do
-        command_path="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-        if [[ "$command_path" == "$target_executable" ]]; then
+        if is_installed_process "$pid"; then
           still_running=true
           break
         fi
