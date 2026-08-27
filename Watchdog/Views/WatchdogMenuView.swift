@@ -138,6 +138,9 @@ struct WatchdogMenuView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .accessibilityElement(children: .combine)
+                .accessibilityLabel(
+                    "압축 \(formattedMemory(memory.compressedBytes)) · \(swapSummary(memory))"
+                )
                 .accessibilityIdentifier("watchdog.memory.details")
             }
         }
