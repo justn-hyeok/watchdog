@@ -131,12 +131,24 @@ private struct WatchdogMenuBarIcon: View {
     let alertCount: Int
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topTrailing) {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .strokeBorder(lineWidth: alertCount == 0 ? 1 : 1.4)
 
-            Image(systemName: alertCount == 0 ? "waveform.path.ecg" : "exclamationmark")
+            Image(systemName: "waveform.path.ecg")
                 .font(.system(size: 9, weight: .bold))
+                .frame(width: 14, height: 16)
+
+            if alertCount > 0 {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 6, height: 6)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(Color(nsColor: .controlBackgroundColor), lineWidth: 1)
+                    }
+                    .offset(x: 3, y: -3)
+            }
         }
         .frame(width: 18, height: 16)
         .symbolRenderingMode(.monochrome)
