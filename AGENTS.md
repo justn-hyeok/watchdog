@@ -3,7 +3,7 @@
 ## Installation and release contract
 
 - Read `INSTALL.md` before installing, updating, removing, packaging, or validating Watchdog. It is the canonical human-and-agent installation guide.
-- The current official beta is `v0.1.0-beta.2` from `https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0-beta.2`.
+- The current official beta is `v0.1.0-beta.3` from `https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0-beta.3`.
 - For an ordinary agent install from this checkout, run `./scripts/install.sh`. It installs into `~/Applications` by default, verifies the pinned SHA-256 and code signature, and requests a graceful `SIGTERM` only for the exact installed Watchdog process during an update.
 - Never use `sudo`, automatic `SIGKILL`, global Gatekeeper disabling, `xattr` quarantine removal, unsigned mirrors, or unverified release files as installation shortcuts.
 - Do not silently change the release tag, download URL, or checksum in only one place. Keep `INSTALL.md`, `README.md`, `scripts/install.sh`, and GitHub release assets synchronized.
