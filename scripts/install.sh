@@ -1,10 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-readonly TAG="v0.1.0-beta.2"
+readonly TAG="v0.1.0-beta.3"
 readonly ARCHIVE_NAME="Watchdog-0.1.0-macos.zip"
 readonly ARCHIVE_URL="https://github.com/justn-hyeok/watchdog/releases/download/${TAG}/${ARCHIVE_NAME}"
-readonly EXPECTED_SHA256="90c0a4d2206bbffe231bc09a43efb7eb61db36e4c8914a9f5c813e9723cdacc4"
+readonly EXPECTED_SHA256="fb4a2b1af90b77ef721769195f49acf90b3bfbf63fe2e25398ef2148f66575ef"
 
 install_dir="${WATCHDOG_INSTALL_DIR:-$HOME/Applications}"
 launch_after_install=true
