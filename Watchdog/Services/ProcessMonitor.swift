@@ -703,7 +703,7 @@ final class ProcessMonitor: ObservableObject {
             content.sound = .default
 
             let request = UNNotificationRequest(
-                identifier: "watchdog-hot-\(snapshot.id)",
+                identifier: "watchdog-hot-\(snapshot.id)-\(snapshot.startTimeMicroseconds)",
                 content: content,
                 trigger: nil
             )
@@ -729,7 +729,7 @@ final class ProcessMonitor: ObservableObject {
             content.sound = .default
 
             let request = UNNotificationRequest(
-                identifier: "watchdog-memory-\(snapshot.id)",
+                identifier: "watchdog-memory-\(snapshot.id)-\(snapshot.startTimeMicroseconds)",
                 content: content,
                 trigger: nil
             )
