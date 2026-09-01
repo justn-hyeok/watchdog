@@ -68,28 +68,71 @@ struct WatchdogMenuView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            controls
-            processList
-            Divider()
-            footer
+        ZStack {
+            VStack(spacing: 0) {
+                header
+                Divider()
+                controls
+                processList
+                Divider()
+                footer
+            }
+            .disabled(pendingAction != nil)
+            .accessibilityHidden(pendingAction != nil)
+
+            if let pendingAction {
+                destructiveConfirmation(for: pendingAction)
+            }
         }
         .frame(width: 480, height: windowHeight)
         .background(.regularMaterial)
-        .alert(item: $pendingAction) { action in
-            Alert(
-                title: Text(action.title),
-                message: Text(action.message),
-                primaryButton: .destructive(Text(action.kind == .terminate ? "종료" : "강제 종료")) {
-                    completeDestructiveAction(action)
-                },
-                secondaryButton: .cancel {
-                    monitor.cancelDestructiveConfirmation(action.confirmationRequest)
-                }
-            )
+        .onDisappear {
+            guard let pendingAction else { return }
+            monitor.cancelDestructiveConfirmation(pendingAction.confirmationRequest)
+            self.pendingAction = nil
         }
+    }
+
+    private func destructiveConfirmation(for action: PendingProcessAction) -> some View {
+        ZStack {
+            Color.black.opacity(0.28)
+                .contentShape(Rectangle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text(action.title)
+                    .font(.headline)
+
+                Text(action.message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Spacer()
+
+                    Button("취소") {
+                        cancelDestructiveAction(action)
+                    }
+                    .keyboardShortcut(.cancelAction)
+
+                    Button(action.kind == .terminate ? "종료" : "강제 종료", role: .destructive) {
+                        pendingAction = nil
+                        completeDestructiveAction(action)
+                    }
+                }
+            }
+            .padding(20)
+            .frame(width: 360)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(.separator.opacity(0.7))
+            }
+            .shadow(radius: 18, y: 8)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("watchdog.destructive-confirmation")
     }
 
     private var header: some View {
@@ -567,6 +610,11 @@ struct WatchdogMenuView: View {
                 showMenuFeedback(.init(isError: true, message: error.localizedDescription))
             }
         }
+    }
+
+    private func cancelDestructiveAction(_ pending: PendingProcessAction) {
+        pendingAction = nil
+        monitor.cancelDestructiveConfirmation(pending.confirmationRequest)
     }
 
     private func actionOutcome(for process: ProcessSnapshot) -> ProcessActionOutcome? {
