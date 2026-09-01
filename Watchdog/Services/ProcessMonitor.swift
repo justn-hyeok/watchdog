@@ -81,7 +81,12 @@ final class ProcessMonitor: ObservableObject {
     @Published var notificationsEnabled: Bool {
         didSet {
             defaults.set(notificationsEnabled, forKey: Keys.notificationsEnabled)
-            if notificationsEnabled { requestNotificationPermission() }
+            if notificationsEnabled {
+                requestNotificationPermission()
+            } else {
+                pendingCPUNotifications.removeAll(keepingCapacity: true)
+                pendingMemoryNotifications.removeAll(keepingCapacity: true)
+            }
         }
     }
 
@@ -90,6 +95,7 @@ final class ProcessMonitor: ObservableObject {
     private let workingDirectoryResolver = WorkingDirectoryResolver()
     private let authorization: ProcessActionAuthorizationActor
     private let controller: ProcessController
+    private let notificationRequestSender: (UNNotificationRequest) -> Void
     private let clock = ContinuousClock()
     private var tracker = HotProcessTracker()
     private var memoryTracker = MemoryProcessTracker()
@@ -99,6 +105,8 @@ final class ProcessMonitor: ObservableObject {
     private var observation: ObservationToken?
     private var generation: UInt64 = 0
     private var notificationCooldowns: [NotificationCooldownKey: ContinuousClock.Instant] = [:]
+    private var pendingCPUNotifications: [ProcessSnapshot] = []
+    private var pendingMemoryNotifications: [ProcessSnapshot] = []
     private var actionOutcomeRecordedAt: [ProcessIdentity: ContinuousClock.Instant] = [:]
     private var pendingConfirmations: [UUID: ContinuousClock.Instant] = [:]
     private var ignorePruneCursor = 0
@@ -107,11 +115,15 @@ final class ProcessMonitor: ObservableObject {
     init(
         defaults: UserDefaults = .standard,
         authorization: ProcessActionAuthorizationActor = ProcessActionAuthorizationActor(),
-        controller: ProcessController = ProcessController()
+        controller: ProcessController = ProcessController(),
+        notificationRequestSender: @escaping (UNNotificationRequest) -> Void = {
+            UNUserNotificationCenter.current().add($0)
+        }
     ) {
         self.defaults = defaults
         self.authorization = authorization
         self.controller = controller
+        self.notificationRequestSender = notificationRequestSender
         threshold = Self.normalizedCPU(defaults.object(forKey: Keys.threshold) as? Double ?? 100)
         sustainedDuration = Self.normalizedDuration(defaults.object(forKey: Keys.sustainedDuration) as? Double ?? 20)
         memoryThresholdGB = Self.normalizedMemory(defaults.object(forKey: Keys.memoryThresholdGB) as? Double ?? 2)
@@ -199,19 +211,15 @@ final class ProcessMonitor: ObservableObject {
             }
 
             let newHotProcesses = nextHotProcesses.subtracting(previousHotProcesses)
-            if notificationsEnabled, !newHotProcesses.isEmpty {
-                sendCPUNotifications(
-                    for: snapshots.filter { newHotProcesses.contains($0.identity) },
-                    at: token.instant
-                )
-            }
-
             let newHighMemoryProcesses = nextHighMemoryProcesses.subtracting(previousHighMemoryProcesses)
-            if notificationsEnabled, !newHighMemoryProcesses.isEmpty {
-                sendMemoryNotifications(
-                    for: snapshots.filter { newHighMemoryProcesses.contains($0.identity) },
-                    at: token.instant
+            if notificationsEnabled {
+                prunePendingNotifications(
+                    hotIdentities: nextHotProcesses,
+                    highMemoryIdentities: nextHighMemoryProcesses
                 )
+                enqueueCPUNotifications(for: snapshots.filter { newHotProcesses.contains($0.identity) })
+                enqueueMemoryNotifications(for: snapshots.filter { newHighMemoryProcesses.contains($0.identity) })
+                sendPendingNotifications(at: token.instant)
             }
         } catch {
             samplingError = error.localizedDescription
@@ -220,6 +228,8 @@ final class ProcessMonitor: ObservableObject {
             memoryTracker.reset()
             hotProcesses.removeAll()
             highMemoryProcesses.removeAll()
+            pendingCPUNotifications.removeAll(keepingCapacity: true)
+            pendingMemoryNotifications.removeAll(keepingCapacity: true)
             await authorization.invalidateAll()
             pendingConfirmations.removeAll(keepingCapacity: true)
             await workingDirectoryResolver.cancel(generation: generation)
@@ -470,6 +480,25 @@ final class ProcessMonitor: ObservableObject {
     }
 
     var notificationCooldownCountPreview: Int { notificationCooldowns.count }
+    var pendingCPUNotificationCountPreview: Int { pendingCPUNotifications.count }
+    var pendingMemoryNotificationCountPreview: Int { pendingMemoryNotifications.count }
+
+    func enqueueCPUNotificationsPreview(_ snapshots: [ProcessSnapshot]) {
+        enqueueCPUNotifications(for: snapshots)
+    }
+
+    func enqueueMemoryNotificationsPreview(_ snapshots: [ProcessSnapshot]) {
+        enqueueMemoryNotifications(for: snapshots)
+    }
+
+    func sendPendingNotificationsPreview(at instant: ContinuousClock.Instant) {
+        sendPendingNotifications(at: instant)
+    }
+
+    func hasNotificationCooldownPreview(identity: ProcessIdentity, reason: AlertReason) -> Bool {
+        notificationCooldowns[NotificationCooldownKey(identity: identity, reason: reason)] != nil
+    }
+
     var terminationPollCountPreview: Int { terminationPollTasks.count }
 
     func startTerminationPollPreview(for identity: ProcessIdentity) {
@@ -692,7 +721,7 @@ final class ProcessMonitor: ObservableObject {
         for snapshots: [ProcessSnapshot],
         at instant: ContinuousClock.Instant
     ) {
-        for snapshot in snapshots.prefix(3) {
+        for snapshot in snapshots {
             let reason = AlertReason.sustainedCPU(percent: threshold)
             guard reserveNotification(identity: snapshot.identity, reason: reason, at: instant) else {
                 continue
@@ -707,7 +736,7 @@ final class ProcessMonitor: ObservableObject {
                 content: content,
                 trigger: nil
             )
-            UNUserNotificationCenter.current().add(request)
+            notificationRequestSender(request)
         }
     }
 
@@ -715,7 +744,7 @@ final class ProcessMonitor: ObservableObject {
         for snapshots: [ProcessSnapshot],
         at instant: ContinuousClock.Instant
     ) {
-        for snapshot in snapshots.prefix(3) {
+        for snapshot in snapshots {
             let reason = AlertReason.sustainedMemory(
                 bytes: UInt64(memoryThresholdGB * 1_024 * 1_024 * 1_024)
             )
@@ -733,8 +762,48 @@ final class ProcessMonitor: ObservableObject {
                 content: content,
                 trigger: nil
             )
-            UNUserNotificationCenter.current().add(request)
+            notificationRequestSender(request)
         }
+    }
+
+    private func enqueueCPUNotifications(for snapshots: [ProcessSnapshot]) {
+        var queuedIdentities = Set(pendingCPUNotifications.map(\.identity))
+        for snapshot in snapshots where !queuedIdentities.contains(snapshot.identity) {
+            guard pendingNotificationCount < 512 else { return }
+            pendingCPUNotifications.append(snapshot)
+            queuedIdentities.insert(snapshot.identity)
+        }
+    }
+
+    private func enqueueMemoryNotifications(for snapshots: [ProcessSnapshot]) {
+        var queuedIdentities = Set(pendingMemoryNotifications.map(\.identity))
+        for snapshot in snapshots where !queuedIdentities.contains(snapshot.identity) {
+            guard pendingNotificationCount < 512 else { return }
+            pendingMemoryNotifications.append(snapshot)
+            queuedIdentities.insert(snapshot.identity)
+        }
+    }
+
+    private var pendingNotificationCount: Int {
+        pendingCPUNotifications.count + pendingMemoryNotifications.count
+    }
+
+    private func sendPendingNotifications(at instant: ContinuousClock.Instant) {
+        let cpuBatch = Array(pendingCPUNotifications.prefix(3))
+        pendingCPUNotifications.removeFirst(cpuBatch.count)
+        sendCPUNotifications(for: cpuBatch, at: instant)
+
+        let memoryBatch = Array(pendingMemoryNotifications.prefix(3))
+        pendingMemoryNotifications.removeFirst(memoryBatch.count)
+        sendMemoryNotifications(for: memoryBatch, at: instant)
+    }
+
+    private func prunePendingNotifications(
+        hotIdentities: Set<ProcessIdentity>,
+        highMemoryIdentities: Set<ProcessIdentity>
+    ) {
+        pendingCPUNotifications.removeAll { !hotIdentities.contains($0.identity) }
+        pendingMemoryNotifications.removeAll { !highMemoryIdentities.contains($0.identity) }
     }
 
     private func reserveNotification(
