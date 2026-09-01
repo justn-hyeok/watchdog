@@ -3,22 +3,9 @@ import XCTest
 
 @MainActor
 final class LaunchAtLoginControllerTests: XCTestCase {
-    private var suiteName = ""
-    private var defaults: UserDefaults!
-
-    override func setUp() {
-        super.setUp()
-        suiteName = "dev.justn.watchdog.launch-at-login-tests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)!
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        defaults = nil
-        super.tearDown()
-    }
-
     func testFirstLaunchRegistersAutomatically() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
         let service = FakeLaunchAtLoginService(status: .notRegistered)
 
         let controller = LaunchAtLoginController(defaults: defaults, service: service)
@@ -29,6 +16,8 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     }
 
     func testApprovalStateIsShownWithoutRepeatedRegistration() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
         let service = FakeLaunchAtLoginService(status: .requiresApproval)
 
         let controller = LaunchAtLoginController(defaults: defaults, service: service)
@@ -39,6 +28,8 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     }
 
     func testUnknownStateDoesNotAttemptRegistration() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
         let service = FakeLaunchAtLoginService(status: .unknown)
 
         let controller = LaunchAtLoginController(defaults: defaults, service: service)
@@ -49,6 +40,8 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     }
 
     func testExplicitOptOutSurvivesTheNextLaunch() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
         let firstService = FakeLaunchAtLoginService(status: .enabled)
         let firstController = LaunchAtLoginController(defaults: defaults, service: firstService)
         firstController.setEnabled(false)
@@ -60,6 +53,8 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     }
 
     func testReenablingClearsExplicitOptOut() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(true, forKey: "launchAtLogin.userOptedOut")
         let service = FakeLaunchAtLoginService(status: .notRegistered)
         let controller = LaunchAtLoginController(defaults: defaults, service: service)
@@ -68,6 +63,11 @@ final class LaunchAtLoginControllerTests: XCTestCase {
 
         XCTAssertEqual(service.registerCallCount, 1)
         XCTAssertFalse(defaults.bool(forKey: "launchAtLogin.userOptedOut"))
+    }
+
+    private func makeDefaults() -> (UserDefaults, String) {
+        let suiteName = "dev.justn.watchdog.launch-at-login-tests.\(UUID().uuidString)"
+        return (UserDefaults(suiteName: suiteName)!, suiteName)
     }
 }
 
