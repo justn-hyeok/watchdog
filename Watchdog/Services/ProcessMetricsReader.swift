@@ -99,10 +99,13 @@ struct ProcessCPUTracker {
         for metrics: [(identity: ProcessIdentity, totalCPUTimeNanoseconds: UInt64)],
         at uptimeNanoseconds: UInt64
     ) -> [ProcessIdentity: Double] {
+        let currentCPUTime = Dictionary(
+            metrics.map { ($0.identity, $0.totalCPUTimeNanoseconds) },
+            uniquingKeysWith: { _, latest in latest }
+        )
+
         defer {
-            previousCPUTime = Dictionary(uniqueKeysWithValues: metrics.map {
-                ($0.identity, $0.totalCPUTimeNanoseconds)
-            })
+            previousCPUTime = currentCPUTime
             previousUptimeNanoseconds = uptimeNanoseconds
         }
 
@@ -115,15 +118,15 @@ struct ProcessCPUTracker {
         let elapsed = uptimeNanoseconds - previousUptimeNanoseconds
         var result: [ProcessIdentity: Double] = [:]
 
-        for metric in metrics {
-            guard let previous = previousCPUTime[metric.identity],
-                  metric.totalCPUTimeNanoseconds >= previous
+        for (identity, totalCPUTimeNanoseconds) in currentCPUTime {
+            guard let previous = previousCPUTime[identity],
+                  totalCPUTimeNanoseconds >= previous
             else {
                 continue
             }
 
-            let delta = metric.totalCPUTimeNanoseconds - previous
-            result[metric.identity] = Double(delta) / Double(elapsed) * 100
+            let delta = totalCPUTimeNanoseconds - previous
+            result[identity] = Double(delta) / Double(elapsed) * 100
         }
 
         return result
