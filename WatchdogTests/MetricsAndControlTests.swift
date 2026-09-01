@@ -134,6 +134,27 @@ final class MetricsAndControlTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(result[identity]), 50, accuracy: 0.001)
     }
 
+    func testProcessCPUDuplicateIdentityUsesLatestMetricForResultAndNextInterval() throws {
+        var tracker = ProcessCPUTracker()
+        let identity = ProcessIdentity(pid: 42, startTimeMicroseconds: 1_000, userID: getuid())
+
+        XCTAssertTrue(tracker.percentages(
+            for: [(identity, 2_000_000_000)],
+            at: 10_000_000_000
+        ).isEmpty)
+
+        XCTAssertTrue(tracker.percentages(
+            for: [(identity, 3_000_000_000), (identity, 1_000_000_000)],
+            at: 12_000_000_000
+        ).isEmpty)
+
+        let result = tracker.percentages(
+            for: [(identity, 2_000_000_000)],
+            at: 14_000_000_000
+        )
+        XCTAssertEqual(try XCTUnwrap(result[identity]), 50, accuracy: 0.001)
+    }
+
     func testSystemCPUUsesTickDelta() throws {
         var tracker = SystemCPUTracker()
         XCTAssertNil(tracker.percentage(for: .init(user: 100, system: 50, idle: 850, nice: 0)))
