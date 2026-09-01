@@ -419,6 +419,60 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertTrue(monitor.reserveNotificationPreview(identity: identities[0], reason: reason, at: instant.advanced(by: .seconds(600))))
     }
 
+    func testCPUNotificationOverflowIsDrainedInBoundedBatches() {
+        let monitor = makeMonitor()
+        let instant = ContinuousClock().now
+        let processes = (0..<5).map {
+            snapshot(pid: Int32(30_000 + $0), name: "/usr/local/bin/cpu-\($0)", cpu: 150)
+        }
+        let reason = AlertReason.sustainedCPU(percent: monitor.threshold)
+
+        monitor.enqueueCPUNotificationsPreview(processes)
+        monitor.sendPendingNotificationsPreview(at: instant)
+
+        XCTAssertEqual(monitor.pendingCPUNotificationCountPreview, 2)
+        XCTAssertEqual(monitor.notificationCooldownCountPreview, 3)
+        XCTAssertTrue(processes.prefix(3).allSatisfy {
+            monitor.hasNotificationCooldownPreview(identity: $0.identity, reason: reason)
+        })
+
+        monitor.sendPendingNotificationsPreview(at: instant.advanced(by: .seconds(2)))
+
+        XCTAssertEqual(monitor.pendingCPUNotificationCountPreview, 0)
+        XCTAssertEqual(monitor.notificationCooldownCountPreview, 5)
+        XCTAssertTrue(processes.allSatisfy {
+            monitor.hasNotificationCooldownPreview(identity: $0.identity, reason: reason)
+        })
+    }
+
+    func testMemoryNotificationOverflowIsDrainedInBoundedBatches() {
+        let monitor = makeMonitor()
+        let instant = ContinuousClock().now
+        let processes = (0..<5).map {
+            snapshot(pid: Int32(31_000 + $0), name: "/usr/local/bin/memory-\($0)", memoryGB: 3)
+        }
+        let reason = AlertReason.sustainedMemory(
+            bytes: UInt64(monitor.memoryThresholdGB * 1_024 * 1_024 * 1_024)
+        )
+
+        monitor.enqueueMemoryNotificationsPreview(processes)
+        monitor.sendPendingNotificationsPreview(at: instant)
+
+        XCTAssertEqual(monitor.pendingMemoryNotificationCountPreview, 2)
+        XCTAssertEqual(monitor.notificationCooldownCountPreview, 3)
+        XCTAssertTrue(processes.prefix(3).allSatisfy {
+            monitor.hasNotificationCooldownPreview(identity: $0.identity, reason: reason)
+        })
+
+        monitor.sendPendingNotificationsPreview(at: instant.advanced(by: .seconds(2)))
+
+        XCTAssertEqual(monitor.pendingMemoryNotificationCountPreview, 0)
+        XCTAssertEqual(monitor.notificationCooldownCountPreview, 5)
+        XCTAssertTrue(processes.allSatisfy {
+            monitor.hasNotificationCooldownPreview(identity: $0.identity, reason: reason)
+        })
+    }
+
     func testTerminationPollIsDeduplicatedPerIdentityAndCleansUp() async {
         let lookupStarted = expectation(description: "termination lookup")
         lookupStarted.assertForOverFulfill = false
@@ -479,7 +533,7 @@ final class ProcessMonitorTests: XCTestCase {
     }
 
     private func makeMonitor() -> ProcessMonitor {
-        ProcessMonitor(defaults: makeDefaults())
+        ProcessMonitor(defaults: makeDefaults(), notificationRequestSender: { _ in })
     }
 
     private func makeDefaults() -> UserDefaults {
