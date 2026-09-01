@@ -50,13 +50,18 @@ private struct ProcessOutcomeSummary: Identifiable {
 
 struct WatchdogMenuView: View {
     @ObservedObject var monitor: ProcessMonitor
-    @StateObject private var launchAtLogin = LaunchAtLoginController()
+    @ObservedObject private var launchAtLogin: LaunchAtLoginController
     @State private var scope: ProcessScope = .attention
     @State private var search = ""
     @State private var showsRules = false
     @State private var pendingAction: PendingProcessAction?
     @State private var menuActionFeedback: MenuActionFeedback?
     @State private var localActionFailures: [ProcessIdentity: LocalActionFailure] = [:]
+
+    init(monitor: ProcessMonitor, launchAtLogin: LaunchAtLoginController) {
+        self.monitor = monitor
+        self._launchAtLogin = ObservedObject(wrappedValue: launchAtLogin)
+    }
 
     private var visibleProcesses: [ProcessSnapshot] {
         monitor.visibleProcesses(scope: scope, search: search)

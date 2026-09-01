@@ -24,11 +24,14 @@ enum WatchdogUITestFixture {
 @MainActor
 private enum WatchdogUITestFixtureHost {
     static var monitor: ProcessMonitor?
+    static var launchAtLogin: LaunchAtLoginController?
     static var window: NSWindow?
 
     static func showWindowIfNeeded() {
-        guard window == nil, let monitor else { return }
-        let hosting = NSHostingView(rootView: WatchdogMenuView(monitor: monitor))
+        guard window == nil, let monitor, let launchAtLogin else { return }
+        let hosting = NSHostingView(
+            rootView: WatchdogMenuView(monitor: monitor, launchAtLogin: launchAtLogin)
+        )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 590),
             styleMask: [.titled, .closable, .miniaturizable],
@@ -185,6 +188,7 @@ private var isRunningUnitTests: Bool {
 @main
 struct WatchdogApp: App {    @NSApplicationDelegateAdaptor(WatchdogAppDelegate.self) private var appDelegate
     @StateObject private var monitor: ProcessMonitor
+    @StateObject private var launchAtLogin: LaunchAtLoginController
     private let showsFixtureWindow: Bool
 
     @MainActor
@@ -192,6 +196,10 @@ struct WatchdogApp: App {    @NSApplicationDelegateAdaptor(WatchdogAppDelegate.s
         let monitor = ProcessMonitor()
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
+        let isUITestFixture = WatchdogUITestFixture.isActive(in: arguments)
+        let launchAtLogin = LaunchAtLoginController(
+            automaticallyRegister: !isUITestFixture && !isRunningUnitTests
+        )
         let usesActionableFixture = arguments.contains(WatchdogUITestFixture.actionable)
         let usesStaleFixture = arguments.contains(WatchdogUITestFixture.stale)
         let usesOutcomeFixture = arguments.contains(WatchdogUITestFixture.outcome)
@@ -231,17 +239,20 @@ struct WatchdogApp: App {    @NSApplicationDelegateAdaptor(WatchdogAppDelegate.s
         }
         if showsFixtureWindow {
             WatchdogUITestFixtureHost.monitor = monitor
+            WatchdogUITestFixtureHost.launchAtLogin = launchAtLogin
         }
         #else
         showsFixtureWindow = false
+        let launchAtLogin = LaunchAtLoginController()
         monitor.start()
         #endif
         _monitor = StateObject(wrappedValue: monitor)
+        _launchAtLogin = StateObject(wrappedValue: launchAtLogin)
     }
 
     var body: some Scene {
         MenuBarExtra {
-            WatchdogMenuView(monitor: monitor)
+            WatchdogMenuView(monitor: monitor, launchAtLogin: launchAtLogin)
         } label: {
             WatchdogMenuBarIcon(alertCount: monitor.alertCount)
         }
