@@ -314,6 +314,76 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertTrue(signals.values.isEmpty)
     }
 
+    func testCancelledDestructiveConfirmationCannotCompleteOrReplay() async throws {
+        let signals = LockedSignals()
+        let process = snapshot(pid: 5_501, name: "/usr/local/bin/gjc")
+        let controller = ProcessController(
+            factsReader: { _ in
+                .found(
+                    LiveProcessFacts(
+                        identity: process.identity,
+                        executablePath: process.executablePath,
+                        isSuspended: false
+                    )
+                )
+            },
+            signalSender: { pid, signal in
+                signals.record(pid: pid, signal: signal)
+                return 0
+            }
+        )
+        let monitor = ProcessMonitor(defaults: makeDefaults(), controller: controller)
+        monitor.loadActionablePreview(processes: [process], hotProcesses: [], updatedAt: Date())
+        let request = try monitor.destructiveActionRequest(.terminate, for: process)
+
+        monitor.cancelDestructiveConfirmation(request)
+
+        for _ in 0..<2 {
+            do {
+                try await monitor.completeDestructiveConfirmation(request)
+                XCTFail("A cancelled confirmation must not be consumable")
+            } catch ProcessControlError.staleObservation {
+            } catch {
+                XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertTrue(signals.values.isEmpty)
+    }
+
+    func testCancellingOneDestructiveConfirmationLeavesAnotherPending() async throws {
+        let signals = LockedSignals()
+        let first = snapshot(pid: 5_501, name: "/usr/local/bin/gjc")
+        let second = snapshot(pid: 5_502, name: "/usr/local/bin/codex")
+        let identities = [first.identity.pid: first, second.identity.pid: second]
+        let controller = ProcessController(
+            factsReader: { pid in
+                guard let process = identities[pid] else { return .absent }
+                return .found(
+                    LiveProcessFacts(
+                        identity: process.identity,
+                        executablePath: process.executablePath,
+                        isSuspended: false
+                    )
+                )
+            },
+            signalSender: { pid, signal in
+                signals.record(pid: pid, signal: signal)
+                return 0
+            }
+        )
+        let monitor = ProcessMonitor(defaults: makeDefaults(), controller: controller)
+        monitor.loadActionablePreview(processes: [first, second], hotProcesses: [], updatedAt: Date())
+        let cancelled = try monitor.destructiveActionRequest(.terminate, for: first)
+        let retained = try monitor.destructiveActionRequest(.terminate, for: second)
+
+        monitor.cancelDestructiveConfirmation(cancelled)
+        try await monitor.completeDestructiveConfirmation(retained)
+
+        XCTAssertEqual(signals.values.count, 1)
+        XCTAssertEqual(signals.values.first?.pid, second.id)
+        XCTAssertEqual(signals.values.first?.signal, SIGTERM)
+    }
+
     func testConsumedAuthorizationCannotSignalAfterGenerationChanges() async throws {
         let gate = AuthorizationConsumeGate()
         let authorization = ProcessActionAuthorizationActor(

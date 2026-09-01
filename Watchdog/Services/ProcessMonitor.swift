@@ -360,6 +360,13 @@ final class ProcessMonitor: ObservableObject {
         try await consumeAction(nonce, action: request.action, process: process)
     }
 
+    func cancelDestructiveConfirmation(
+        _ request: DestructiveActionConfirmationRequest
+    ) {
+        guard pendingConfirmations[request.id] == request.requestedAt else { return }
+        pendingConfirmations.removeValue(forKey: request.id)
+    }
+
     func ignoreUntilExit(_ process: ProcessSnapshot) {
         guard ignoredProcesses.contains(process.identity) || ignoredProcesses.count < 512 else {
             showFeedback(.init(kind: .error, message: "무시 목록이 가득 찼습니다"))

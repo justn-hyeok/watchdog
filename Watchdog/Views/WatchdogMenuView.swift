@@ -85,7 +85,9 @@ struct WatchdogMenuView: View {
                 primaryButton: .destructive(Text(action.kind == .terminate ? "종료" : "강제 종료")) {
                     completeDestructiveAction(action)
                 },
-                secondaryButton: .cancel()
+                secondaryButton: .cancel {
+                    monitor.cancelDestructiveConfirmation(action.confirmationRequest)
+                }
             )
         }
     }
