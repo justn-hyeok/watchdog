@@ -110,6 +110,22 @@ final class MetricsAndControlTests: XCTestCase {
         await waitForHelperCleanup()
     }
 
+    func testTimedOutChildThatIgnoresSIGTERMIsForceKilledAfterGrace() async {
+        do {
+            _ = try await CommandRunner.run(
+                "/bin/sh",
+                arguments: ["-c", "trap '' TERM; sleep 30"],
+                deadline: .milliseconds(100)
+            )
+            XCTFail("Expected command deadline")
+        } catch CommandRunnerError.timedOut {
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        await waitForHelperCleanup(timeout: .seconds(4))
+    }
+
     func testProcessCPUUsesIntervalDelta() throws {
         var tracker = ProcessCPUTracker()
         let identity = ProcessIdentity(pid: 42, startTimeMicroseconds: 1_000, userID: getuid())
@@ -359,8 +375,8 @@ final class MetricsAndControlTests: XCTestCase {
         return try await actor.consume(nonce, action: action, identity: process.identity, currentGeneration: 7, at: instant)
     }
 
-    private func waitForHelperCleanup() async {
-        let deadline = ContinuousClock().now.advanced(by: .seconds(3))
+    private func waitForHelperCleanup(timeout: Duration = .seconds(3)) async {
+        let deadline = ContinuousClock().now.advanced(by: timeout)
         while CommandRunner.activeProcessCountPreview != 0,
               ContinuousClock().now < deadline {
             try? await Task.sleep(for: .milliseconds(20))

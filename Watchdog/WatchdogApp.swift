@@ -3,14 +3,35 @@ import Darwin
 import SwiftUI
 
 #if DEBUG
+/// Synthetic launch arguments for shipping-target UI tests. Fixture instances
+/// bypass the single-instance lock so tests can run next to the installed
+/// Watchdog.
+enum WatchdogUITestFixture {
+    static let actionable = "--ui-test-fixture"
+    static let stale = "--ui-test-stale-fixture"
+    static let outcome = "--ui-test-outcome-fixture"
+    static let exited = "--ui-test-exited-fixture"
+    static let stillRunning = "--ui-test-still-running-fixture"
+
+    static func isActive(in arguments: [String]) -> Bool {
+        [actionable, stale, outcome, exited, stillRunning]
+            .contains { arguments.contains($0) }
+    }
+}
+#endif
+
+#if DEBUG
 @MainActor
 private enum WatchdogUITestFixtureHost {
     static var monitor: ProcessMonitor?
+    static var launchAtLogin: LaunchAtLoginController?
     static var window: NSWindow?
 
     static func showWindowIfNeeded() {
-        guard window == nil, let monitor else { return }
-        let hosting = NSHostingView(rootView: WatchdogMenuView(monitor: monitor))
+        guard window == nil, let monitor, let launchAtLogin else { return }
+        let hosting = NSHostingView(
+            rootView: WatchdogMenuView(monitor: monitor, launchAtLogin: launchAtLogin)
+        )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 590),
             styleMask: [.titled, .closable, .miniaturizable],
@@ -39,11 +60,7 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
-        let isUITestFixture = arguments.contains("--ui-test-fixture")
-            || arguments.contains("--ui-test-stale-fixture")
-            || arguments.contains("--ui-test-outcome-fixture")
-            || arguments.contains("--ui-test-exited-fixture")
-            || arguments.contains("--ui-test-still-running-fixture")
+        let isUITestFixture = WatchdogUITestFixture.isActive(in: arguments)
         if !isUITestFixture {
             switch acquireInstanceLock() {
             case .heldByAnotherInstance:
@@ -73,6 +90,7 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func acquireInstanceLock() -> InstanceLockResult {
+        guard !isRunningUnitTests else { return .acquired }
         guard let applicationSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -159,10 +177,18 @@ private struct WatchdogMenuBarIcon: View {
     }
 }
 
+/// Hosted unit tests launch a second Watchdog app next to the installed
+/// instance; they must neither contend for the single-instance lock nor run
+/// the live sampling loop during tests.
+private var isRunningUnitTests: Bool {
+    ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || NSClassFromString("XCTestCase") != nil
+}
+
 @main
-struct WatchdogApp: App {
-    @NSApplicationDelegateAdaptor(WatchdogAppDelegate.self) private var appDelegate
+struct WatchdogApp: App {    @NSApplicationDelegateAdaptor(WatchdogAppDelegate.self) private var appDelegate
     @StateObject private var monitor: ProcessMonitor
+    @StateObject private var launchAtLogin: LaunchAtLoginController
     private let showsFixtureWindow: Bool
 
     @MainActor
@@ -170,11 +196,15 @@ struct WatchdogApp: App {
         let monitor = ProcessMonitor()
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
-        let usesActionableFixture = arguments.contains("--ui-test-fixture")
-        let usesStaleFixture = arguments.contains("--ui-test-stale-fixture")
-        let usesOutcomeFixture = arguments.contains("--ui-test-outcome-fixture")
-        let usesExitedFixture = arguments.contains("--ui-test-exited-fixture")
-        let usesStillRunningFixture = arguments.contains("--ui-test-still-running-fixture")
+        let isUITestFixture = WatchdogUITestFixture.isActive(in: arguments)
+        let launchAtLogin = LaunchAtLoginController(
+            automaticallyRegister: !isUITestFixture && !isRunningUnitTests
+        )
+        let usesActionableFixture = arguments.contains(WatchdogUITestFixture.actionable)
+        let usesStaleFixture = arguments.contains(WatchdogUITestFixture.stale)
+        let usesOutcomeFixture = arguments.contains(WatchdogUITestFixture.outcome)
+        let usesExitedFixture = arguments.contains(WatchdogUITestFixture.exited)
+        let usesStillRunningFixture = arguments.contains(WatchdogUITestFixture.stillRunning)
         showsFixtureWindow = usesActionableFixture || usesStaleFixture
             || usesOutcomeFixture || usesExitedFixture || usesStillRunningFixture
         if usesActionableFixture || usesOutcomeFixture || usesExitedFixture || usesStillRunningFixture {
@@ -204,22 +234,25 @@ struct WatchdogApp: App {
                 highMemoryProcesses: [Self.fixtureProcesses[0].identity],
                 updatedAt: Date(timeIntervalSinceNow: -6)
             )
-        } else {
+        } else if !isRunningUnitTests {
             monitor.start()
         }
         if showsFixtureWindow {
             WatchdogUITestFixtureHost.monitor = monitor
+            WatchdogUITestFixtureHost.launchAtLogin = launchAtLogin
         }
         #else
         showsFixtureWindow = false
+        let launchAtLogin = LaunchAtLoginController()
         monitor.start()
         #endif
         _monitor = StateObject(wrappedValue: monitor)
+        _launchAtLogin = StateObject(wrappedValue: launchAtLogin)
     }
 
     var body: some Scene {
         MenuBarExtra {
-            WatchdogMenuView(monitor: monitor)
+            WatchdogMenuView(monitor: monitor, launchAtLogin: launchAtLogin)
         } label: {
             WatchdogMenuBarIcon(alertCount: monitor.alertCount)
         }

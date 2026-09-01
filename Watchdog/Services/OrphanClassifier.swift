@@ -2,7 +2,12 @@ import Foundation
 
 enum OrphanClassifier {
     static func classify(_ snapshots: [ProcessSnapshot]) -> [ProcessSnapshot] {
-        let byPID = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0) })
+        // ps output crosses a process boundary; tolerate malformed duplicate
+        // PIDs instead of crashing the menu bar app.
+        let byPID = Dictionary(
+            snapshots.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
 
         return snapshots.map { snapshot in
             guard snapshot.kind == .agent else { return snapshot }

@@ -57,6 +57,16 @@ final class OrphanClassifierTests: XCTestCase {
         XCTAssertFalse(result.suspectedOrphan)
     }
 
+    func testDuplicatePIDLinesDoNotCrashAndStayClassified() throws {
+        let first = snapshot(pid: 103, parent: 1, name: "/Users/test/.local/bin/gjc")
+        let duplicate = snapshot(pid: 103, parent: 1, name: "/Users/test/.local/bin/gjc")
+
+        let result = try classified(103, in: [first, duplicate])
+
+        XCTAssertEqual(result.orphanReason, .reparentedToLaunchd)
+        XCTAssertEqual(OrphanClassifier.classify([first, duplicate]).count, 2)
+    }
+
     private func classified(_ pid: Int32, in snapshots: [ProcessSnapshot]) throws -> ProcessSnapshot {
         try XCTUnwrap(OrphanClassifier.classify(snapshots).first { $0.id == pid })
     }

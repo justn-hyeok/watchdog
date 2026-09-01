@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 enum CommandRunnerError: LocalizedError, Sendable {
@@ -26,6 +27,7 @@ enum CommandRunnerError: LocalizedError, Sendable {
 
 enum CommandRunner {
     private static let admission = HelperProcessAdmission(capacity: 3)
+    private static let drainGrace: TimeInterval = 0.5
 
     static func run(
         _ executable: String,
@@ -58,7 +60,7 @@ enum CommandRunner {
                             state.complete(.failure(error))
                         }
                     }
-                    Task {
+                    let timeoutTask = Task {
                         do {
                             try await ContinuousClock().sleep(for: deadline)
                             state.timeout(executable: executable)
@@ -66,6 +68,7 @@ enum CommandRunner {
                             return
                         }
                     }
+                    state.installTimeoutTask(timeoutTask)
                 }
             } onCancel: {
                 state.cancel(executable: executable)
@@ -117,8 +120,8 @@ enum CommandRunner {
         error.start()
         state.terminateIfCancelled(process)
         process.waitUntilExit()
-        let outputData = output.finish()
-        let errorData = error.finish()
+        let outputData = output.finish(within: Self.drainGrace)
+        let errorData = error.finish(within: Self.drainGrace)
         state.clear(process)
 
         return try decode(
@@ -182,10 +185,13 @@ private final class HelperProcessAdmission: @unchecked Sendable {
 }
 
 private final class ChildProcessState: @unchecked Sendable {
+    private static let killGrace: TimeInterval = 2.0
+
     private let lock = NSLock()
     private var process: Process?
     private var continuation: CheckedContinuation<String, Error>?
     private var completion: Result<String, Error>?
+    private var timeoutTask: Task<Void, Never>?
 
     func register(_ process: Process) -> Bool {
         lock.withLock {
@@ -208,6 +214,18 @@ private final class ChildProcessState: @unchecked Sendable {
             return false
         }
         return true
+    }
+
+    func installTimeoutTask(_ task: Task<Void, Never>) {
+        let completed = lock.withLock { () -> Bool in
+            if completion == nil {
+                timeoutTask = task
+            }
+            return completion != nil
+        }
+        if completed {
+            task.cancel()
+        }
     }
 
     func terminateIfCancelled(_ process: Process) {
@@ -246,20 +264,48 @@ private final class ChildProcessState: @unchecked Sendable {
     private func finish(with result: Result<String, Error>, terminate: Bool) {
         let resolved: (
             continuation: CheckedContinuation<String, Error>?,
-            process: Process?
+            process: Process?,
+            timeoutTask: Task<Void, Never>?
         ) = lock.withLock {
             guard completion == nil else {
-                return (continuation: nil, process: nil)
+                return (continuation: nil, process: nil, timeoutTask: nil)
             }
             completion = result
             let continuation = self.continuation
             self.continuation = nil
-            return (continuation: continuation, process: terminate ? process : nil)
+            let timeoutTask = self.timeoutTask
+            self.timeoutTask = nil
+            return (
+                continuation: continuation,
+                process: terminate ? process : nil,
+                timeoutTask: timeoutTask
+            )
         }
+        resolved.timeoutTask?.cancel()
         if let runningProcess = resolved.process, runningProcess.isRunning {
             runningProcess.terminate()
+            // A child that ignores SIGTERM must not hold the worker thread and
+            // the helper admission slot until it exits on its own.
+            let escalationTarget = ForceKillTarget(runningProcess)
+            DispatchQueue.global(qos: .utility).asyncAfter(
+                deadline: .now() + Self.killGrace
+            ) {
+                if escalationTarget.process.isRunning {
+                    kill(escalationTarget.process.processIdentifier, SIGKILL)
+                }
+            }
         }
         resolved.continuation?.resume(with: result)
+    }
+}
+
+/// Process is not Sendable; only `isRunning` and the process identifier are
+/// read across threads.
+private final class ForceKillTarget: @unchecked Sendable {
+    let process: Process
+
+    init(_ process: Process) {
+        self.process = process
     }
 }
 
@@ -267,7 +313,9 @@ private final class PipeDrain: @unchecked Sendable {
     private let pipe: Pipe
     private let queue = DispatchQueue(label: "watchdog.command-runner.pipe")
     private let group = DispatchGroup()
+    private let lock = NSLock()
     private var data = Data()
+    private var consumed = false
 
     init(pipe: Pipe) {
         self.pipe = pipe
@@ -276,15 +324,29 @@ private final class PipeDrain: @unchecked Sendable {
     func start() {
         group.enter()
         queue.async { [self] in
-            data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = pipe.fileHandleForReading.readDataToEndOfFile()
+            lock.withLock {
+                if !consumed {
+                    data = output
+                    consumed = true
+                }
+            }
             try? pipe.fileHandleForReading.close()
             group.leave()
         }
         try? pipe.fileHandleForWriting.close()
     }
 
-    func finish() -> Data {
-        group.wait()
-        return data
+    /// After the direct child exits, orphaned descendants can still hold the
+    /// pipe write end open; bound the wait so they cannot hold a helper
+    /// admission slot indefinitely.
+    func finish(within grace: TimeInterval) -> Data {
+        _ = group.wait(timeout: .now() + grace)
+        let output = lock.withLock { () -> Data in
+            consumed = true
+            return data
+        }
+        try? pipe.fileHandleForReading.close()
+        return output
     }
 }
