@@ -7,21 +7,21 @@
 | 항목 | 값 |
 |---|---|
 | 지원 OS | macOS 14 이상 |
-| 현재 배포 | `v0.1.0-beta.4` |
-| 공식 릴리스 | <https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0-beta.4> |
+| 현재 배포 | `v0.1.0-beta.5` |
+| 공식 릴리스 | <https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0-beta.5> |
 | 기본 설치 위치 | `~/Applications/Watchdog.app` 또는 `/Applications/Watchdog.app` |
 | 앱 식별자 | `dev.justn.watchdog` |
 
 공식 파일 SHA-256:
 
 ```text
-Watchdog-0.1.0-macos.zip  4c837f2919f512ff8e53a79ac13f06641bc38ac93ad3f14c0e87d46fd59c8eb2
-Watchdog-0.1.0-macos.dmg  a59c324adf6f123a3a0b9867fcde5cc96eec1d8d36031cb7252f32651b3b494a
+Watchdog-0.1.0-macos.zip  44b198ae0aa19137706f2e39f0cc01eb23687e59515c00b2b1e45377229256bb
+Watchdog-0.1.0-macos.dmg  ab6937131d23a487418ac5e72763781ac88717a464aec6654e565b06aca2af57
 ```
 
 ## 사람용: DMG로 설치
 
-1. [공식 릴리스](https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0-beta.4)에서 `Watchdog-0.1.0-macos.dmg`를 내려받습니다.
+1. [공식 릴리스](https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0-beta.5)에서 `Watchdog-0.1.0-macos.dmg`를 내려받습니다.
 2. 선택적으로 무결성을 확인합니다.
 
    ```bash
