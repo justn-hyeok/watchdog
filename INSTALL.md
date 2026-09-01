@@ -7,8 +7,8 @@
 | 항목 | 값 |
 |---|---|
 | 지원 OS | macOS 14 이상 |
-| 현재 배포 | `v0.1.0-beta.5` |
-| 공식 릴리스 | <https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0-beta.5> |
+| 현재 배포 | `v0.1.0` |
+| 공식 릴리스 | <https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0> |
 | 기본 설치 위치 | `~/Applications/Watchdog.app` 또는 `/Applications/Watchdog.app` |
 | 앱 식별자 | `dev.justn.watchdog` |
 
@@ -21,7 +21,7 @@ Watchdog-0.1.0-macos.dmg  ab6937131d23a487418ac5e72763781ac88717a464aec6654e565b
 
 ## 사람용: DMG로 설치
 
-1. [공식 릴리스](https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0-beta.5)에서 `Watchdog-0.1.0-macos.dmg`를 내려받습니다.
+1. [공식 릴리스](https://github.com/justn-hyeok/watchdog/releases/tag/v0.1.0)에서 `Watchdog-0.1.0-macos.dmg`를 내려받습니다.
 2. 선택적으로 무결성을 확인합니다.
 
    ```bash
@@ -29,7 +29,7 @@ Watchdog-0.1.0-macos.dmg  ab6937131d23a487418ac5e72763781ac88717a464aec6654e565b
    ```
 
 3. DMG를 열고 Watchdog을 Applications 바로가기로 드래그합니다.
-4. 현재 베타는 Apple 공증 전이므로 Finder에서 Watchdog을 우클릭하고 **열기 → 열기**를 선택합니다.
+4. 현재 공개 배포본은 Apple 공증 전이므로 Finder에서 Watchdog을 우클릭하고 **열기 → 열기**를 선택합니다.
 5. 우클릭으로 열리지 않으면 한 번 실행을 시도한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기**를 선택합니다.
 
 첫 실행 시 Watchdog은 로그인 항목에 자동 등록됩니다. 감지 규칙의 **로그인 시 자동 실행** 토글을 끄면 자동 등록을 해제할 수 있습니다.
@@ -151,7 +151,7 @@ rm -rf "$HOME/Applications/Watchdog.app"
 
 ## Gatekeeper 관련 원칙
 
-현재 베타는 Apple Development 서명이며 Developer ID 공증 전입니다. macOS의 앱별 승인 절차를 사용합니다.
+현재 공개 배포본은 Apple Development 서명이며 Developer ID 공증 전입니다. macOS의 앱별 승인 절차를 사용합니다.
 
 허용:
 

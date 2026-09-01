@@ -10,11 +10,11 @@ Watchdog는 폭주하거나 고아가 된 프로세스를 터미널 명령 없�
 
 1. [GitHub Releases](https://github.com/justn-hyeok/watchdog/releases)에서 최신 DMG를 내려받습니다.
 2. DMG를 열고 Watchdog을 Applications 폴더로 드래그합니다.
-3. 현재 공개 베타는 Apple 공증 전 빌드이므로 최초 실행 시 Finder에서 Watchdog을 우클릭하고 **열기 → 열기**를 선택합니다.
+3. 현재 공개 배포본은 Apple 공증 전 빌드이므로 최초 실행 시 Finder에서 Watchdog을 우클릭하고 **열기 → 열기**를 선택합니다.
 
 우클릭으로 열리지 않으면 한 번 실행을 시도한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기**를 선택합니다. 이는 Apple이 제공하는 앱별 승인 절차입니다. 전역 Gatekeeper 비활성화나 격리 속성 제거는 필요하지 않습니다.
 
-공식 배포 파일은 이 저장소의 Releases에서만 제공합니다. `v0.1.0-beta.5` 파일 무결성:
+공식 배포 파일은 이 저장소의 Releases에서만 제공합니다. `v0.1.0` 파일 무결성:
 
 ```text
 Watchdog-0.1.0-macos.zip  44b198ae0aa19137706f2e39f0cc01eb23687e59515c00b2b1e45377229256bb
@@ -91,7 +91,7 @@ xcodebuild -project Watchdog.xcodeproj -scheme Watchdog -configuration Release b
 
 ## 배포 정책
 
-Watchdog는 유료 Apple Developer Program에 의존하지 않는 공개 베타로 배포합니다. Developer ID 공증은 현재 릴리스 조건이 아니며, 사용자는 최초 실행 시 macOS의 앱별 승인 절차를 거쳐야 합니다. 공식 GitHub Releases, 고정 SHA-256, 코드 서명 구조 검증, 재현 가능한 소스 빌드 절차로 배포 무결성을 보완합니다.
+Watchdog는 유료 Apple Developer Program에 의존하지 않는 공개판으로 배포합니다. Developer ID 공증은 현재 릴리스 조건이 아니며, 사용자는 최초 실행 시 macOS의 앱별 승인 절차를 거쳐야 합니다. 공식 GitHub Releases, 고정 SHA-256, 코드 서명 구조 검증, 재현 가능한 소스 빌드 절차로 배포 무결성을 보완합니다.
 
 단위·통합·UI 테스트, Debug/Release 빌드, 앱 실행 스모크와 장기 실행 리소스 검증은 공증 여부와 관계없이 릴리스 품질 게이트로 유지합니다. 향후 공증 배포를 선택할 경우에만 Developer ID 서명, 올바른 Team ID, Apple 공증 `Accepted`, stapling과 Gatekeeper 검증을 추가로 요구합니다.
 
