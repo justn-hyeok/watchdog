@@ -56,6 +56,7 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var instanceLockFileDescriptor: Int32 = -1
+    var launchAtLoginController: LaunchAtLoginController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
@@ -72,6 +73,9 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         NSApplication.shared.setActivationPolicy(isUITestFixture ? .regular : .accessory)
+        if !isUITestFixture {
+            launchAtLoginController?.registerByDefaultIfNeeded()
+        }
         if isUITestFixture {
             Task { @MainActor in
                 await Task.yield()
@@ -86,6 +90,7 @@ final class WatchdogAppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         NSApplication.shared.setActivationPolicy(.accessory)
+        launchAtLoginController?.registerByDefaultIfNeeded()
         #endif
     }
 
@@ -194,18 +199,17 @@ struct WatchdogApp: App {    @NSApplicationDelegateAdaptor(WatchdogAppDelegate.s
     @MainActor
     init() {
         let monitor = ProcessMonitor()
+        let launchAtLogin = LaunchAtLoginController(automaticallyRegister: false)
+        var shouldShowFixtureWindow = false
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         let isUITestFixture = WatchdogUITestFixture.isActive(in: arguments)
-        let launchAtLogin = LaunchAtLoginController(
-            automaticallyRegister: !isUITestFixture && !isRunningUnitTests
-        )
         let usesActionableFixture = arguments.contains(WatchdogUITestFixture.actionable)
         let usesStaleFixture = arguments.contains(WatchdogUITestFixture.stale)
         let usesOutcomeFixture = arguments.contains(WatchdogUITestFixture.outcome)
         let usesExitedFixture = arguments.contains(WatchdogUITestFixture.exited)
         let usesStillRunningFixture = arguments.contains(WatchdogUITestFixture.stillRunning)
-        showsFixtureWindow = usesActionableFixture || usesStaleFixture
+        shouldShowFixtureWindow = usesActionableFixture || usesStaleFixture
             || usesOutcomeFixture || usesExitedFixture || usesStillRunningFixture
         if usesActionableFixture || usesOutcomeFixture || usesExitedFixture || usesStillRunningFixture {
             monitor.loadActionablePreview(
@@ -237,17 +241,17 @@ struct WatchdogApp: App {    @NSApplicationDelegateAdaptor(WatchdogAppDelegate.s
         } else if !isRunningUnitTests {
             monitor.start()
         }
-        if showsFixtureWindow {
+        if shouldShowFixtureWindow {
             WatchdogUITestFixtureHost.monitor = monitor
             WatchdogUITestFixtureHost.launchAtLogin = launchAtLogin
         }
         #else
-        showsFixtureWindow = false
-        let launchAtLogin = LaunchAtLoginController()
         monitor.start()
         #endif
         _monitor = StateObject(wrappedValue: monitor)
         _launchAtLogin = StateObject(wrappedValue: launchAtLogin)
+        showsFixtureWindow = shouldShowFixtureWindow
+        appDelegate.launchAtLoginController = launchAtLogin
     }
 
     var body: some Scene {

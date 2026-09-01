@@ -94,7 +94,7 @@ final class LaunchAtLoginController: ObservableObject {
         }
     }
 
-    private func registerByDefaultIfNeeded() {
+    func registerByDefaultIfNeeded() {
         guard !defaults.bool(forKey: Keys.userOptedOut), service.status == .notRegistered else {
             return
         }
