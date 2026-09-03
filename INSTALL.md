@@ -8,7 +8,7 @@
 |---|---|
 | 지원 OS | macOS 14 이상 |
 | 현재 배포 | `v0.2.0` |
-| 공식 릴리스 | <https://github.com/justn-hyeok/watchdog/releases/tag/v0.2.0> |
+| 공식 릴리스 | <https://github.com/stacking-money-forever/watchdog/releases/tag/v0.2.0> |
 | 기본 설치 위치 | `~/Applications/Watchdog.app` 또는 `/Applications/Watchdog.app` |
 | 앱 식별자 | `dev.justn.watchdog` |
 
@@ -21,7 +21,7 @@ Watchdog-0.2.0-macos.dmg  082ac4d5c071a714b8de2936a54dd759a8243d293f9b64ae6e0781
 
 ## 사람용: DMG로 설치
 
-1. [공식 릴리스](https://github.com/justn-hyeok/watchdog/releases/tag/v0.2.0)에서 `Watchdog-0.2.0-macos.dmg`를 내려받습니다.
+1. [공식 릴리스](https://github.com/stacking-money-forever/watchdog/releases/tag/v0.2.0)에서 `Watchdog-0.2.0-macos.dmg`를 내려받습니다.
 2. 선택적으로 무결성을 확인합니다.
 
    ```bash
@@ -99,7 +99,7 @@ CFBundleShortVersionString: 0.2.0
 - XcodeGen
 
 ```bash
-git clone https://github.com/justn-hyeok/watchdog.git
+git clone https://github.com/stacking-money-forever/watchdog.git
 cd watchdog
 xcodegen generate
 xcodebuild \

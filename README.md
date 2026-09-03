@@ -8,7 +8,7 @@ Watchdog는 폭주하거나 고아가 된 프로세스를 터미널 명령 없�
 
 ### 사람이 설치
 
-1. [GitHub Releases](https://github.com/justn-hyeok/watchdog/releases)에서 최신 DMG를 내려받습니다.
+1. [GitHub Releases](https://github.com/stacking-money-forever/watchdog/releases)에서 최신 DMG를 내려받습니다.
 2. DMG를 열고 Watchdog을 Applications 폴더로 드래그합니다.
 3. 현재 공개 배포본은 Apple 공증 전 빌드이므로 최초 실행 시 Finder에서 Watchdog을 우클릭하고 **열기 → 열기**를 선택합니다.
 
@@ -30,7 +30,7 @@ shasum -a 256 Watchdog-0.2.0-macos.dmg
 ### 에이전트·터미널에서 설치
 
 ```bash
-git clone https://github.com/justn-hyeok/watchdog.git
+git clone https://github.com/stacking-money-forever/watchdog.git
 cd watchdog
 ./scripts/install.sh
 ```
@@ -73,7 +73,7 @@ cd watchdog
 요구 사항: Xcode 16 이상, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ```bash
-git clone https://github.com/justn-hyeok/watchdog.git
+git clone https://github.com/stacking-money-forever/watchdog.git
 cd watchdog
 xcodegen generate
 xcodebuild -project Watchdog.xcodeproj -scheme Watchdog -configuration Debug build
