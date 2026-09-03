@@ -103,24 +103,25 @@ final class WorktreeStateResolverTests: XCTestCase {
         XCTAssertEqual(states["/repo-a"]?.verdict, .clean)
     }
 
-    func testResolveDeliversVerdictForRealRepository() async {
-        let repository = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent() // WatchdogTests
-            .deletingLastPathComponent() // repo root
-        let resolver = WorktreeStateResolver()
+    func testResolveDeliversParsedStatusFromRunner() async {
+        let resolver = WorktreeStateResolver(
+            runner: { _, _, _ in
+                "# branch.head feature/alert-policy\n# branch.ab +0 -0\n"
+            }
+        )
         let collector = StateCollector()
 
-        await resolver.resolve([repository.path]) { path, state in
+        await resolver.resolve(["/tmp/fake-checkout"]) { path, state in
             collector.record(path: path, state: state)
         }
         await resolver.drainForTesting()
 
-
         let states = collector.states
-        let verdict = states[repository.path]?.verdict
-        XCTAssertNotEqual(verdict, .missing, "the Watchdog checkout is a git repository")
+        XCTAssertEqual(states["/tmp/fake-checkout"]?.verdict, .clean)
+        XCTAssertEqual(states["/tmp/fake-checkout"]?.detail, "feature/alert-policy")
     }
 }
+
 
 private final class StateCollector: @unchecked Sendable {
     private let lock = NSLock()
