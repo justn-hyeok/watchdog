@@ -57,6 +57,12 @@ final class ProcessMonitor: ObservableObject {
     @Published private(set) var actionOutcomes: [ProcessIdentity: ProcessActionOutcome] = [:]
     @Published private(set) var notificationAuthorization: UNAuthorizationStatus = .notDetermined
     @Published private(set) var isRefreshing = false
+    @Published var autoSuspendEnabled: Bool {
+        didSet {
+            defaults.set(autoSuspendEnabled, forKey: Keys.autoSuspendEnabled)
+        }
+    }
+
     @Published var threshold: Double {
         didSet {
             let canonical = Self.normalizedCPU(threshold)
@@ -93,6 +99,7 @@ final class ProcessMonitor: ObservableObject {
     private let defaults: UserDefaults
     private let sampler = ProcessSampler()
     private let workingDirectoryResolver = WorkingDirectoryResolver()
+    private let worktreeResolver = WorktreeStateResolver()
     private let authorization: ProcessActionAuthorizationActor
     private let controller: ProcessController
     private let notificationRequestSender: (UNNotificationRequest) -> Void
@@ -128,15 +135,16 @@ final class ProcessMonitor: ObservableObject {
         sustainedDuration = Self.normalizedDuration(defaults.object(forKey: Keys.sustainedDuration) as? Double ?? 20)
         memoryThresholdGB = Self.normalizedMemory(defaults.object(forKey: Keys.memoryThresholdGB) as? Double ?? 2)
         notificationsEnabled = defaults.object(forKey: Keys.notificationsEnabled) as? Bool ?? true
+        autoSuspendEnabled = defaults.object(forKey: Keys.autoSuspendEnabled) as? Bool ?? false
         defaults.set(threshold, forKey: Keys.threshold)
         defaults.set(sustainedDuration, forKey: Keys.sustainedDuration)
         defaults.set(memoryThresholdGB, forKey: Keys.memoryThresholdGB)
     }
 
     var alertCount: Int {
-        let orphaned = Set(processes.filter { $0.suspectedOrphan && !ignoredProcesses.contains($0.identity) }.map(\.identity))
-        return hotProcesses.union(highMemoryProcesses).union(orphaned).count
+        orphanAlertProcesses.union(hotProcesses).union(highMemoryProcesses).count
     }
+
 
     func start() {
         guard refreshTask == nil else { return }
@@ -197,18 +205,20 @@ final class ProcessMonitor: ObservableObject {
             }
             hotProcesses = nextHotProcesses
             highMemoryProcesses = nextHighMemoryProcesses
+            if autoSuspendEnabled {
+                await autoSuspendNewlyFlagged(
+                    hot: nextHotProcesses.subtracting(previousHotProcesses),
+                    highMemory: nextHighMemoryProcesses.subtracting(previousHighMemoryProcesses),
+                    snapshots: snapshots
+                )
+            }
+            await resolveWorktreeStates(snapshots: snapshots)
             if let systemCPUPercent = sample.systemCPUPercent {
                 self.systemCPUPercent = systemCPUPercent
             }
             systemMemory = sample.systemMemory
             lastUpdated = Date()
             samplingError = nil
-            await workingDirectoryResolver.resolve(
-                snapshots,
-                generation: token.generation
-            ) { [weak self] result in
-                await self?.mergeWorkingDirectory(result)
-            }
 
             let newHotProcesses = nextHotProcesses.subtracting(previousHotProcesses)
             let newHighMemoryProcesses = nextHighMemoryProcesses.subtracting(previousHighMemoryProcesses)
@@ -244,8 +254,7 @@ final class ProcessMonitor: ObservableObject {
             scoped = processes.filter {
                 !ignoredProcesses.contains($0.identity)
                     && (hotProcesses.contains($0.identity)
-                    || highMemoryProcesses.contains($0.identity)
-                    || $0.suspectedOrphan)
+                    || highMemoryProcesses.contains($0.identity))
             }
         case .agents:
             scoped = processes.filter { $0.kind == .agent }
@@ -267,6 +276,15 @@ final class ProcessMonitor: ObservableObject {
         }
 
         return scope == .all ? Array(filtered.prefix(60)) : filtered
+    }
+
+    /// Orphans are informational: a detached-but-healthy agent must not keep
+    /// the menu bar badge lit. Only live CPU/memory pressure counts as an alert.
+    var orphanAlertProcesses: Set<ProcessIdentity> {
+        Set(
+            processes.filter { $0.suspectedOrphan && !ignoredProcesses.contains($0.identity) }
+                .map(\.identity)
+        )
     }
 
     func isHot(_ process: ProcessSnapshot) -> Bool {
@@ -392,6 +410,36 @@ final class ProcessMonitor: ObservableObject {
         showFeedback(.init(kind: .success, message: "이 프로세스는 종료할 때까지 무시합니다"))
     }
 
+
+    /// Auto-suspend is reversible by design: SIGSTOP halts runaway CPU and
+    /// token consumption without ever killing work. Only newly flagged
+    /// processes are targeted, never already-suspended ones, and every signal
+    /// goes through the same authorization pipeline as manual actions.
+    private func autoSuspendNewlyFlagged(
+        hot: Set<ProcessIdentity>,
+        highMemory: Set<ProcessIdentity>,
+        snapshots: [ProcessSnapshot]
+    ) async {
+        let byIdentity = Dictionary(
+            snapshots.map { ($0.identity, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let candidates = hot.union(highMemory)
+            .compactMap { byIdentity[$0] }
+            .filter { !$0.isProtected && !$0.isSuspended }
+        for snapshot in candidates {
+            do {
+                let nonce = try await requestImmediateAction(.suspend, for: snapshot)
+                try await consumeAction(nonce, action: .suspend, process: snapshot)
+                showFeedback(
+                    .init(kind: .success, message: "자동 일시 정지: \(snapshot.displayName) (CPU·메모리 임계값 초과)")
+                )
+            } catch {
+                recordActionOutcome(.failed(error.localizedDescription), for: snapshot.identity)
+            }
+        }
+    }
+
     func undoIgnore(_ process: ProcessSnapshot) {
         guard ignoredProcesses.remove(process.identity) != nil else { return }
         if let state = ignoredAlertStates.removeValue(forKey: process.identity) {
@@ -401,6 +449,35 @@ final class ProcessMonitor: ObservableObject {
         showFeedback(.init(kind: .success, message: "이 프로세스를 다시 감시합니다"))
     }
 
+    /// Ask the worktree resolver about each agent's project directory. Only
+    /// paths that look like a git worktree (`…/<repo>/…` pattern) are probed;
+    /// results merge back generation-safely.
+    private func resolveWorktreeStates(snapshots: [ProcessSnapshot]) async {
+        let candidates = snapshots.filter {
+            $0.kind == .agent
+                && $0.workingDirectory != nil
+                && $0.workingDirectory != "/"
+        }
+        guard !candidates.isEmpty else { return }
+        let generation = observation?.generation ?? generation
+        await worktreeResolver.resolve(candidates.map(\.workingDirectory!)) { [weak self] path, state in
+            Task { @MainActor [weak self] in
+                self?.mergeWorktreeState(path: path, state: state, generation: generation)
+            }
+        }
+    }
+
+    private func mergeWorktreeState(
+        path: String,
+        state: WorktreeState?,
+        generation: UInt64
+    ) {
+        guard observation?.generation == generation else { return }
+        for index in processes.indices
+        where processes[index].workingDirectory == path {
+            processes[index].worktreeState = state
+        }
+    }
 #if DEBUG
     func loadStalePreview(
         processes: [ProcessSnapshot],
@@ -472,6 +549,19 @@ final class ProcessMonitor: ObservableObject {
 
     func setActionOutcomePreview(_ outcome: ProcessActionOutcome, for process: ProcessSnapshot) {
         recordActionOutcome(outcome, for: process.identity)
+    }
+
+    func refreshAutoSuspendPreview(
+        hot: Set<ProcessIdentity>,
+        highMemory: Set<ProcessIdentity>,
+        snapshots: [ProcessSnapshot]
+    ) async {
+        guard autoSuspendEnabled else { return }
+        await autoSuspendNewlyFlagged(
+            hot: hot,
+            highMemory: highMemory,
+            snapshots: snapshots
+        )
     }
 
     func pruneActionOutcomesPreview(at instant: ContinuousClock.Instant) {
@@ -845,6 +935,7 @@ final class ProcessMonitor: ObservableObject {
         static let sustainedDuration = "sustainedDuration"
         static let memoryThresholdGB = "memoryThresholdGB"
         static let notificationsEnabled = "notificationsEnabled"
+        static let autoSuspendEnabled = "autoSuspendEnabled"
     }
 
     private static func normalizedCPU(_ value: Double) -> Double {

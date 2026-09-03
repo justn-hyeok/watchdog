@@ -35,6 +35,10 @@ struct ProcessRow: View {
                         reasonBadge(reason)
                     }
 
+                    if let worktree = process.worktreeState {
+                        statusBadge(worktree.verdict.localizedDescription, color: worktreeColor(worktree.verdict))
+                    }
+
                     if isIgnored {
                         statusBadge("무시 중", color: .secondary)
                     }
@@ -200,10 +204,17 @@ struct ProcessRow: View {
     }
 
     private var rowBackground: Color {
-        if process.suspectedOrphan { return .orange.opacity(0.07) }
         if hasHotAlert { return .red.opacity(0.06) }
         if hasHighMemoryAlert { return .purple.opacity(0.07) }
         return Color(nsColor: .controlBackgroundColor).opacity(0.55)
+    }
+
+    private func worktreeColor(_ verdict: WorktreeVerdict) -> Color {
+        switch verdict {
+        case .clean: return .green
+        case .dirty: return .blue
+        case .missing: return .secondary
+        }
     }
 
     private var hasHotAlert: Bool {

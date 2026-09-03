@@ -61,6 +61,13 @@ enum OrphanClassifier {
             "/tmux",
             "/zellij",
             "muxy",
+            "visual studio code",
+            "vscode",
+            "code helper",
+            "electron",
+            "herdr",
+            "ghostty",
+            "warp",
         ].contains { value.contains($0) }
     }
 }

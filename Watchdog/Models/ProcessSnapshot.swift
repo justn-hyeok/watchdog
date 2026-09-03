@@ -88,6 +88,7 @@ struct ProcessSnapshot: Identifiable, Equatable, Sendable {
     let executablePath: String
     var startTimeMicroseconds: UInt64 = 0
     var workingDirectory: String?
+    var worktreeState: WorktreeState?
     var orphanReason: OrphanReason? = nil
 
     var identity: ProcessIdentity {

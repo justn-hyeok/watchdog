@@ -84,14 +84,10 @@ struct WatchdogMenuView: View {
                 destructiveConfirmation(for: pendingAction)
             }
         }
-        .frame(width: 480, height: windowHeight)
-        .background(.regularMaterial)
-        .onDisappear {
-            guard let pendingAction else { return }
-            monitor.cancelDestructiveConfirmation(pendingAction.confirmationRequest)
-            self.pendingAction = nil
-        }
+        // A pending confirmation must survive the popup closing (focus loss);
+        // it is only cancelled explicitly or when its 30 s validity expires.
     }
+
 
     private func destructiveConfirmation(for action: PendingProcessAction) -> some View {
         ZStack {
@@ -136,11 +132,11 @@ struct WatchdogMenuView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Watchdog")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
                         .accessibilityIdentifier("watchdog.header")
                     Text(statusText)
                         .font(.caption)
@@ -149,53 +145,24 @@ struct WatchdogMenuView: View {
 
                 Spacer()
 
-                HStack(spacing: 18) {
-                    metricValue(
-                        title: "CPU",
-                        value: "\(Int(monitor.systemCPUPercent.rounded()))%",
-                        detail: nil,
-                        color: gaugeColor
-                    )
-                    metricValue(
-                        title: "메모리",
-                        value: memorySummary,
-                        detail: monitor.systemMemory?.pressureLevel.localizedDescription,
-                        color: memoryPressureColor
-                    )
-                }
-            }
+                Text("CPU \(Int(monitor.systemCPUPercent.rounded()))%")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(gaugeColor)
+                    .accessibilityLabel("시스템 CPU 사용률")
+                    .accessibilityValue("\(Int(monitor.systemCPUPercent.rounded()))%")
 
-            HStack(spacing: 12) {
-                resourceGauge(
-                    label: "CPU",
-                    value: monitor.systemCPUPercent,
-                    color: gaugeColor
-                )
-                resourceGauge(
-                    label: "메모리",
-                    value: monitor.systemMemory?.usedPercent,
-                    color: memoryPressureColor
-                )
-            }
-
-            if let memory = monitor.systemMemory {
-                HStack(spacing: 12) {
-                    Text("압축 \(formattedMemory(memory.compressedBytes))")
-                    Spacer()
-                    Text(swapSummary(memory))
-                }
-                .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("메모리 세부 정보")
-                .accessibilityValue(
-                    "압축 \(formattedMemory(memory.compressedBytes)) · \(swapSummary(memory))"
-                )
-                .accessibilityIdentifier("watchdog.memory.details")
+                Text(memorySummary)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(memoryPressureColor)
+                    .accessibilityLabel("시스템 메모리 사용률")
+                    .accessibilityValue(memorySummary)
             }
         }
-        .padding(16)
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 
     private var controls: some View {
@@ -245,6 +212,8 @@ struct WatchdogMenuView: View {
                         in: 5...120,
                         step: 5
                     )
+                    Toggle("임계값 초과 시 자동 일시 정지", isOn: $monitor.autoSuspendEnabled)
+                        .help("임계값을 넘은 프로세스에 SIGSTOP을 보내 안전하게 멈춥니다. 재개는 수동입니다.")
                     Toggle("시스템 알림", isOn: $monitor.notificationsEnabled)
                     if monitor.notificationAuthorization == .denied {
                         HStack {
@@ -432,9 +401,9 @@ struct WatchdogMenuView: View {
     }
 
     private var windowHeight: CGFloat {
-        let rows = CGFloat(min(visibleProcesses.count, 4)) * 60
-        let rules = showsRules ? CGFloat(195) : 0
-        return min(590, max(420, 360 + rows + rules))
+        let rows = CGFloat(min(visibleProcesses.count, 7)) * 60
+        let rules = showsRules ? CGFloat(225) : 0
+        return min(720, max(420, 200 + rows + rules))
     }
 
     private var memorySummary: String {
@@ -444,17 +413,6 @@ struct WatchdogMenuView: View {
         return "\(used)/\(total)"
     }
 
-    private func formattedMemory(_ bytes: UInt64) -> String {
-        WatchdogFormatters.memory.string(fromByteCount: Int64(clamping: bytes))
-    }
-
-    private func swapSummary(_ memory: SystemMemorySnapshot) -> String {
-        guard let used = memory.swapUsedBytes, let total = memory.swapTotalBytes else {
-            return "스왑 정보 없음"
-        }
-        return "스왑 \(formattedMemory(used))/\(formattedMemory(total))"
-    }
-
     private var memoryPressureColor: Color {
         switch monitor.systemMemory?.pressureLevel {
         case .normal: return .mint
@@ -462,50 +420,6 @@ struct WatchdogMenuView: View {
         case .critical: return .red
         case .unknown, nil: return .secondary
         }
-    }
-
-    @ViewBuilder
-    private func metricValue(title: String, value: String, detail: String?, color: Color) -> some View {
-        VStack(alignment: .trailing, spacing: 1) {
-            Text(title)
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(size: 19, weight: .bold, design: .rounded))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            if let detail {
-                Text(detail)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(color)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func resourceGauge(label: String, value: Double?, color: Color) -> some View {
-        Group {
-            if let value {
-                Gauge(value: value, in: 0...100) {
-                    EmptyView()
-                }
-                .gaugeStyle(.accessoryLinearCapacity)
-                .tint(color)
-                .accessibilityValue("\(Int(value.rounded()))%")
-            } else {
-                HStack(spacing: 6) {
-                    Capsule()
-                        .fill(Color.secondary.opacity(0.18))
-                        .frame(height: 4)
-                    Text("정보 없음")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                }
-                .accessibilityValue("사용량 정보 없음")
-            }
-        }
-        .accessibilityLabel("\(label) 사용률")
     }
 
     @ViewBuilder
